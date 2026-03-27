@@ -2,24 +2,20 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { UsersModule } from './users/users.module';
-import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
-    // Menyambungkan NestJS ke MySQL di komputermu (Laragon)
+    // Menyambungkan ke MySQL bawaan Laragon
     TypeOrmModule.forRoot({
       type: 'mysql',
       host: 'localhost',
       port: 3306,
       username: 'root',      // Username default Laragon
-      password: '',          // Password default Laragon (biasanya kosong)
-      database: 'cbt_db',    // Pastikan database ini sudah kamu buat di phpMyAdmin/HeidiSQL
+      password: '',          // Password default Laragon (kosongkan)
+      database: 'cbt',    // Pastikan database ini sudah ada di phpMyAdmin/HeidiSQL
       autoLoadEntities: true,
-      synchronize: true,     // AJAIB: NestJS akan otomatis mengubah tabel MySQL mengikuti kodemu!
+      synchronize: true,     // AJAIB: NestJS akan otomatis membuatkan tabel di MySQL!
     }),
-    UsersModule,
-    AuthModule,
   ],
   controllers: [AppController],
   providers: [AppService],
