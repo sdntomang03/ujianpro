@@ -1,9 +1,9 @@
 const express = require('express');
 const session = require('express-session');
-const MySQLStore = require('express-mysql-session')(session);
+// const MySQLStore = require('express-mysql-session')(session); // Dimatikan sementara
 const app = express();
 
-// Port dinamis untuk hosting (Hostinger/Render) atau port 3000 untuk local
+// Port dinamis untuk hosting atau port 3000 untuk local
 const port = process.env.PORT || 3000;
 
 // Middleware membaca JSON & Data Form
@@ -11,32 +11,29 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // ==========================================
-// 1. KONFIGURASI DATABASE & SESSION
+// 1. DATA DUMMY (Pengganti Database Sementara)
 // ==========================================
-const dbOptions = {
-    host: 'localhost', 
-    port: 3306,
-    user: 'u470537086_keluargaku',      
-    password: 'Boyol@li1', // PERINGATAN: Ganti password ini di Hostinger demi keamanan
-    database: 'u470537086_keluargaku' 
-};
+// Daftar siswa yang diizinkan login
+const dataSiswaDummy = [
+    { nis: '12345', password: '123', nama: 'Budi Santoso' },
+    { nis: '67890', password: '123', nama: 'Siti Aminah' }
+];
 
-const sessionStore = new MySQLStore(dbOptions);
-
+// ==========================================
+// 2. KONFIGURASI SESSION (Tanpa MySQL)
+// ==========================================
 app.use(session({
-    key: 'cbt_session_cookie',
     secret: 'rahasia-cbt-super-aman', 
-    store: sessionStore,              
     resave: false,
     saveUninitialized: false,
+    // Session disimpan di RAM server (karena MySQLStore dimatikan)
     cookie: {
         maxAge: 1000 * 60 * 60 * 2    
     }
 }));
 
-
 // ==========================================
-// 2. ROUTING (JALUR APLIKASI CBT)
+// 3. ROUTING (JALUR APLIKASI CBT)
 // ==========================================
 
 // Route 1: Halaman Depan (Form Login Tailwind)
@@ -54,7 +51,7 @@ app.get('/', (req, res) => {
         <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-md">
             <div class="text-center mb-8">
                 <h1 class="text-3xl font-extrabold text-blue-600">CBT Online</h1>
-                <p class="text-gray-500 mt-2">Silakan login untuk memulai ujian</p>
+                <p class="text-gray-500 mt-2">Gunakan NIS: 12345 dan Pass: 123</p>
             </div>
             
             <form action="/login" method="GET">
@@ -76,26 +73,33 @@ app.get('/', (req, res) => {
     `);
 });
 
-// Route 2: Proses Login (Menangkap data dari Form)
+// Route 2: Proses Login (Cek Data Dummy)
 app.get('/login', (req, res) => {
-    // Menangkap NIS dan Password yang diketik di form
     const inputNis = req.query.nis;
     const inputPassword = req.query.password;
 
-    // SIMULASI LOGIN (Belum mengecek ke database MySQL secara langsung)
-    if (inputNis && inputPassword) {
-        req.session.isLoggedIn = true;
-        req.session.namaSiswa = "Siswa " + inputNis; // Nama menyesuaikan NIS yang diketik
-        req.session.nis = inputNis;
+    // Mencari siswa di array data dummy
+    const siswaDitemukan = dataSiswaDummy.find(s => s.nis === inputNis && s.password === inputPassword);
 
-        // Redirect otomatis ke halaman ujian
+    if (siswaDitemukan) {
+        // Jika cocok, catat di session
+        req.session.isLoggedIn = true;
+        req.session.namaSiswa = siswaDitemukan.nama;
+        req.session.nis = siswaDitemukan.nis;
+
         res.redirect('/ujian');
     } else {
-        res.send('Login Gagal! Harap isi form dengan benar. <a href="/">Kembali</a>');
+        res.send(`
+            <div style="text-align:center; margin-top:50px; font-family:sans-serif;">
+                <h2 style="color:red;">Login Gagal!</h2>
+                <p>NIS atau Password salah.</p>
+                <a href="/">Kembali</a>
+            </div>
+        `);
     }
 });
 
-// Route 3: Halaman Ujian (DILINDUNGI - Versi Tailwind)
+// Route 3: Halaman Ujian (DILINDUNGI)
 app.get('/ujian', (req, res) => {
     if (!req.session.isLoggedIn) {
         return res.status(401).send(`
@@ -170,17 +174,7 @@ app.get('/ujian', (req, res) => {
     `);
 });
 
-// Route 4: Contoh API Pengambilan Data
-app.get('/api/soal', (req, res) => {
-    const soal = {
-        id: 1,
-        pertanyaan: "Berapa hasil dari 5 + 5?",
-        pilihan: ["8", "9", "10", "11"]
-    };
-    res.json(soal); 
-});
-
-// Route 5: Proses Logout
+// Route 4: Proses Logout
 app.get('/logout', (req, res) => {
     req.session.destroy((err) => {
         res.send(`
@@ -193,8 +187,8 @@ app.get('/logout', (req, res) => {
 });
 
 // ==========================================
-// 3. MENYALAKAN SERVER
+// 4. MENYALAKAN SERVER
 // ==========================================
 app.listen(port, () => {
-    console.log(`Server CBT sukses berjalan di http://localhost:${port}`);
+    console.log(`Server CBT DUMMY sukses berjalan di http://localhost:${port}`);
 });
