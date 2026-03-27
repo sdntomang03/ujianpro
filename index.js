@@ -51,17 +51,42 @@ app.get('/', (req, res) => {
 });
 
 // Route 2: Proses Login (Simulasi)
-app.get('/login', (req, res) => {
-    // Simulasi: Di aplikasi asli, kita akan mengecek username/password ke tabel 'users'
-    // Untuk sekarang, kita langsung anggap siswa berhasil login
-    req.session.isLoggedIn = true;
-    req.session.namaSiswa = "Budi Santoso";
-    req.session.nis = "12345678";
-
+// Route 1: Halaman Depan (Form Login)
+app.get('/', (req, res) => {
     res.send(`
-        <h3>Login Berhasil!</h3>
-        <p>Sesi kamu sudah diamankan di dalam Database MySQL.</p>
-        <p>Halo, ${req.session.namaSiswa}. <a href="/ujian">Mulai Ujian Sekarang</a></p>
+    <!DOCTYPE html>
+    <html lang="id">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Login CBT</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+    <body class="bg-gray-100 flex items-center justify-center min-h-screen font-sans">
+        
+        <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-md">
+            <div class="text-center mb-8">
+                <h1 class="text-3xl font-extrabold text-blue-600">CBT Online</h1>
+                <p class="text-gray-500 mt-2">Silakan login untuk memulai ujian</p>
+            </div>
+            
+            <form action="/login" method="GET">
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">Nomor Induk Siswa (NIS)</label>
+                    <input type="text" name="nis" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Masukkan NIS Anda (Misal: 12345678)" required>
+                </div>
+                <div class="mb-6">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">Password</label>
+                    <input type="password" name="password" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Masukkan Password" required>
+                </div>
+                <button type="submit" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition duration-300">
+                    Masuk
+                </button>
+            </form>
+        </div>
+
+    </body>
+    </html>
     `);
 });
 
