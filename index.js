@@ -3,37 +3,34 @@ const session = require('express-session');
 const MySQLStore = require('express-mysql-session')(session);
 const app = express();
 
-// Port dinamis untuk hosting (Hostinger/Render) atau port 3000 untuk local (Laragon)
+// Port dinamis untuk hosting (Hostinger/Render) atau port 3000 untuk local
 const port = process.env.PORT || 3000;
 
-// Middleware agar server bisa membaca data JSON (berguna saat siswa mengirim jawaban)
+// Middleware membaca JSON & Data Form
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // ==========================================
 // 1. KONFIGURASI DATABASE & SESSION
 // ==========================================
-
-// Pengaturan koneksi ke Database MySQL (Sesuaikan dengan Laragon kamu)
 const dbOptions = {
-    host: 'localhost', // Nanti diubah sesuai info dari Hostinger saat deploy
+    host: 'localhost', 
     port: 3306,
-    user: 'u470537086_keluargaku',      // Username default database Laragon
-    password: 'Boyol@li1',      // Password default database Laragon (biasanya kosong)
-    database: 'u470537086_keluargaku' // PASTIKAN KAMU SUDAH MEMBUAT DATABASE INI DI PHPMYADMIN
+    user: 'u470537086_keluargaku',      
+    password: 'Boyol@li1', // PERINGATAN: Ganti password ini di Hostinger demi keamanan
+    database: 'u470537086_keluargaku' 
 };
 
-// Membuat "Gudang" penyimpanan session di dalam tabel MySQL
 const sessionStore = new MySQLStore(dbOptions);
 
-// Memasang Session ke dalam Express
 app.use(session({
     key: 'cbt_session_cookie',
-    secret: 'rahasia-cbt-super-aman', // Ganti dengan teks acak yang kuat saat rilis
-    store: sessionStore,              // Arahkan penyimpanan ke MySQL
+    secret: 'rahasia-cbt-super-aman', 
+    store: sessionStore,              
     resave: false,
     saveUninitialized: false,
     cookie: {
-        maxAge: 1000 * 60 * 60 * 2    // Sesi login bertahan 2 jam (dalam milidetik)
+        maxAge: 1000 * 60 * 60 * 2    
     }
 }));
 
@@ -42,16 +39,7 @@ app.use(session({
 // 2. ROUTING (JALUR APLIKASI CBT)
 // ==========================================
 
-// Route 1: Halaman Depan
-app.get('/', (req, res) => {
-    res.send(`
-        <h1>Selamat Datang di Aplikasi CBT!</h1> 
-        <p><a href="/login">Simulasi Login (Siswa A)</a></p>
-    `);
-});
-
-// Route 2: Proses Login (Simulasi)
-// Route 1: Halaman Depan (Form Login)
+// Route 1: Halaman Depan (Form Login Tailwind)
 app.get('/', (req, res) => {
     res.send(`
     <!DOCTYPE html>
@@ -63,7 +51,6 @@ app.get('/', (req, res) => {
         <script src="https://cdn.tailwindcss.com"></script>
     </head>
     <body class="bg-gray-100 flex items-center justify-center min-h-screen font-sans">
-        
         <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-md">
             <div class="text-center mb-8">
                 <h1 class="text-3xl font-extrabold text-blue-600">CBT Online</h1>
@@ -73,7 +60,7 @@ app.get('/', (req, res) => {
             <form action="/login" method="GET">
                 <div class="mb-4">
                     <label class="block text-gray-700 text-sm font-bold mb-2">Nomor Induk Siswa (NIS)</label>
-                    <input type="text" name="nis" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Masukkan NIS Anda (Misal: 12345678)" required>
+                    <input type="text" name="nis" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Masukkan NIS Anda" required>
                 </div>
                 <div class="mb-6">
                     <label class="block text-gray-700 text-sm font-bold mb-2">Password</label>
@@ -84,39 +71,106 @@ app.get('/', (req, res) => {
                 </button>
             </form>
         </div>
-
     </body>
     </html>
     `);
 });
 
-// Route 3: Halaman Ujian (DILINDUNGI)
+// Route 2: Proses Login (Menangkap data dari Form)
+app.get('/login', (req, res) => {
+    // Menangkap NIS dan Password yang diketik di form
+    const inputNis = req.query.nis;
+    const inputPassword = req.query.password;
+
+    // SIMULASI LOGIN (Belum mengecek ke database MySQL secara langsung)
+    if (inputNis && inputPassword) {
+        req.session.isLoggedIn = true;
+        req.session.namaSiswa = "Siswa " + inputNis; // Nama menyesuaikan NIS yang diketik
+        req.session.nis = inputNis;
+
+        // Redirect otomatis ke halaman ujian
+        res.redirect('/ujian');
+    } else {
+        res.send('Login Gagal! Harap isi form dengan benar. <a href="/">Kembali</a>');
+    }
+});
+
+// Route 3: Halaman Ujian (DILINDUNGI - Versi Tailwind)
 app.get('/ujian', (req, res) => {
-    // Pengecekan: Apakah siswa punya tiket/session login?
     if (!req.session.isLoggedIn) {
         return res.status(401).send(`
-            <h3 style="color:red;">Akses Ditolak!</h3>
-            <p>Anda belum login. Silakan <a href="/">Kembali ke Halaman Depan</a>.</p>
+            <div style="text-align:center; margin-top:50px; font-family:sans-serif;">
+                <h2 style="color:red;">Akses Ditolak!</h2>
+                <p>Anda belum login. <a href="/">Kembali ke Halaman Login</a></p>
+            </div>
         `);
     }
 
-    // Jika sudah login, tampilkan lembar ujian
     res.send(`
-        <h1>Lembar Ujian</h1>
-        <h3>Nama: ${req.session.namaSiswa} | NIS: ${req.session.nis}</h3>
-        <hr>
-        <p><b>1. Berapa hasil dari 5 + 5?</b></p>
-        <ul>
-            <li><input type="radio" name="soal1"> A. 8</li>
-            <li><input type="radio" name="soal1"> B. 9</li>
-            <li><input type="radio" name="soal1"> C. 10</li>
-        </ul>
-        <br>
-        <p><a href="/logout"><button>Selesai & Keluar</button></a></p>
+    <!DOCTYPE html>
+    <html lang="id">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Lembar Ujian</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+    <body class="bg-gray-50 text-gray-800 font-sans">
+        
+        <nav class="bg-blue-600 text-white shadow-md">
+            <div class="max-w-5xl mx-auto px-4 py-3 flex justify-between items-center">
+                <h1 class="text-xl font-bold tracking-wider">CBT Online</h1>
+                <div class="flex items-center gap-4">
+                    <span class="font-medium bg-blue-700 px-3 py-1 rounded-full text-sm">
+                        👤 ${req.session.namaSiswa} (${req.session.nis})
+                    </span>
+                    <a href="/logout" class="bg-red-500 hover:bg-red-600 px-4 py-2 rounded-lg text-sm font-bold transition shadow">
+                        Keluar
+                    </a>
+                </div>
+            </div>
+        </nav>
+
+        <main class="max-w-3xl mx-auto mt-8 px-4 pb-12">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div class="bg-blue-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                    <h2 class="font-bold text-lg text-blue-800">Soal No. 1</h2>
+                    <span class="bg-white border border-blue-200 text-blue-800 text-xs font-bold px-3 py-1 rounded-full shadow-sm">
+                        Matematika
+                    </span>
+                </div>
+                
+                <div class="p-6">
+                    <p class="text-lg mb-6 font-medium">Berapa hasil dari 5 + 5?</p>
+                    <div class="space-y-3">
+                        <label class="flex items-center p-4 border border-gray-200 rounded-lg cursor-pointer hover:bg-blue-50 transition">
+                            <input type="radio" name="jawaban1" value="A" class="w-5 h-5 text-blue-600 focus:ring-blue-500">
+                            <span class="ml-3 text-gray-700 font-medium">A. 8</span>
+                        </label>
+                        <label class="flex items-center p-4 border border-gray-200 rounded-lg cursor-pointer hover:bg-blue-50 transition">
+                            <input type="radio" name="jawaban1" value="B" class="w-5 h-5 text-blue-600 focus:ring-blue-500">
+                            <span class="ml-3 text-gray-700 font-medium">B. 9</span>
+                        </label>
+                        <label class="flex items-center p-4 border border-gray-200 rounded-lg cursor-pointer hover:bg-blue-50 transition">
+                            <input type="radio" name="jawaban1" value="C" class="w-5 h-5 text-blue-600 focus:ring-blue-500">
+                            <span class="ml-3 text-gray-700 font-medium">C. 10</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+                    <button class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition shadow-md">
+                        Simpan & Lanjut
+                    </button>
+                </div>
+            </div>
+        </main>
+    </body>
+    </html>
     `);
 });
 
-// Route 4: Contoh API Pengambilan Data (Jika butuh lewat JSON/Frontend terpisah)
+// Route 4: Contoh API Pengambilan Data
 app.get('/api/soal', (req, res) => {
     const soal = {
         id: 1,
@@ -128,18 +182,15 @@ app.get('/api/soal', (req, res) => {
 
 // Route 5: Proses Logout
 app.get('/logout', (req, res) => {
-    // Menghapus session dari database dan menghancurkan cookie di browser siswa
     req.session.destroy((err) => {
-        if (err) {
-            return res.status(500).send('Terjadi kesalahan saat logout.');
-        }
         res.send(`
-            <h3>Anda berhasil keluar.</h3> 
-            <a href="/">Kembali ke Awal</a>
+            <div style="text-align:center; margin-top:50px; font-family:sans-serif;">
+                <h3>Anda berhasil keluar.</h3> 
+                <a href="/">Kembali ke Login</a>
+            </div>
         `);
     });
 });
-
 
 // ==========================================
 // 3. MENYALAKAN SERVER
