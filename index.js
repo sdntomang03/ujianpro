@@ -15,7 +15,7 @@ app.use(express.urlencoded({ extended: true }));
 // ==========================================
 // Daftar siswa yang diizinkan login
 const dataSiswaDummy = [
-    { nis: '12345', password: '123', nama: 'Budi Santoso' },
+    { nis: '12345', password: '12345', nama: 'Budi Santoso' },
     { nis: '67890', password: '123', nama: 'Siti Aminah' }
 ];
 
