@@ -20,6 +20,8 @@
   },
   "homepage": "https://github.com/sdntomang03/ujianpro#readme",
   "dependencies": {
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "express-mysql-session": "^3.0.3",
+    "mysql2": "^3.20.0"
   }
 }
