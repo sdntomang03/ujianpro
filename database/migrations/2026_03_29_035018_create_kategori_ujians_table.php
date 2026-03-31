@@ -11,15 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('ujian_soal', function (Blueprint $table) {
+        // UBAH 'kategoris' MENJADI 'kategori_ujians' DI BAWAH INI:
+        Schema::create('kategori_ujians', function (Blueprint $table) {
             $table->id();
-
-            // BARIS KATEGORI_UJIAN_ID SUDAH DIHAPUS DARI SINI
-
-            $table->foreignId('ujian_id')->constrained('ujians')->cascadeOnDelete();
-            $table->foreignId('soal_id')->constrained('soals')->cascadeOnDelete();
-            $table->integer('urutan_nomor')->nullable();
-
+            $table->string('nama_kategori');
+            $table->text('deskripsi')->nullable();
             $table->timestamps();
         });
     }
@@ -29,6 +25,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('ujian_soal');
+        Schema::dropIfExists('kategori_ujians');
     }
 };

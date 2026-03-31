@@ -13,13 +13,17 @@ return new class extends Migration
     {
         Schema::create('ujians', function (Blueprint $table) {
             $table->id();
+
+            // PASTIKAN BARIS INI TERTULIS 'kategori_ujian_id' dan 'kategori_ujians'
+            $table->foreignId('kategori_ujian_id')->constrained('kategori_ujians')->cascadeOnDelete();
+
             $table->string('judul_ujian');
             $table->text('deskripsi')->nullable();
             $table->integer('durasi_menit');
             $table->dateTime('waktu_mulai')->nullable();
             $table->dateTime('waktu_selesai')->nullable();
             $table->boolean('acak_soal')->default(true);
-            $table->boolean('acak_opsi')->default(true); // Fitur baru!
+            $table->boolean('acak_opsi')->default(true);
             $table->timestamps();
         });
     }

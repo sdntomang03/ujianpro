@@ -5,7 +5,18 @@ import { Link, usePage } from '@inertiajs/react';
 import { useState, useEffect, useRef } from 'react';
 
 export default function AuthenticatedLayout({ header, children }) {
-    const user = usePage().props.auth.user;
+  const { auth, flash } = usePage().props;
+    const user = auth.user;
+    const [showToast, setShowToast] = useState(false);
+
+    // Efek untuk menghilangkan Toast otomatis setelah 5 detik
+    useEffect(() => {
+        if (flash?.success || flash?.error) {
+            setShowToast(true);
+            const timer = setTimeout(() => setShowToast(false), 5000);
+            return () => clearTimeout(timer);
+        }
+    }, [flash]);
 
     // State Navigasi
     const [showingNavigationDropdown, setShowingNavigationDropdown] = useState(false);
@@ -57,6 +68,9 @@ export default function AuthenticatedLayout({ header, children }) {
                             <div className="hidden sm:flex sm:space-x-8">
                                 <NavLink href={route('dashboard')} active={route().current('dashboard')} className="font-semibold text-slate-600 hover:text-indigo-600 transition-colors">
                                     Dashboard
+                                </NavLink>
+                                <NavLink href={route('ujian.index')} active={route().current('ujian.index')} className="font-semibold text-slate-600 hover:text-indigo-600 transition-colors">
+                                    Daftar Ujian
                                 </NavLink>
                             </div>
                         </div>
@@ -156,11 +170,41 @@ export default function AuthenticatedLayout({ header, children }) {
             )}
 
             {/* KONTEN UTAMA */}
+{/* KONTEN UTAMA */}
             <main className="py-8">
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     {children}
                 </div>
             </main>
+
+            {/* TOAST NOTIFICATION (MELAYANG DI POJOK KANAN BAWAH) */}
+            {showToast && (flash.success || flash.error) && (
+                <div className="fixed bottom-6 right-6 z-[100] transition-all duration-500 ease-in-out transform translate-y-0 opacity-100">
+                    {flash.success && (
+                        <div className="bg-emerald-600/90 backdrop-blur-md text-white px-6 py-4 rounded-2xl shadow-2xl shadow-emerald-900/20 flex items-center gap-4 border border-emerald-500/50">
+                            <div className="bg-white/20 p-2 rounded-full">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
+                            </div>
+                            <p className="font-bold tracking-wide">{flash.success}</p>
+                            <button onClick={() => setShowToast(false)} className="ml-2 text-emerald-200 hover:text-white transition-colors">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                            </button>
+                        </div>
+                    )}
+
+                    {flash.error && (
+                        <div className="bg-rose-600/90 backdrop-blur-md text-white px-6 py-4 rounded-2xl shadow-2xl shadow-rose-900/20 flex items-center gap-4 border border-rose-500/50">
+                            <div className="bg-white/20 p-2 rounded-full">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                            </div>
+                            <p className="font-bold tracking-wide">{flash.error}</p>
+                            <button onClick={() => setShowToast(false)} className="ml-2 text-rose-200 hover:text-white transition-colors">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 }

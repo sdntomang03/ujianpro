@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\JawabanPeserta;
+use App\Models\KategoriUjian;
 use App\Models\PesertaUjian;
 use App\Models\Soal;
 use App\Models\Ujian;
@@ -103,9 +104,18 @@ class UjianController extends Controller
         // 1. Ambil Sesi Ujian Siswa
         $sesi = PesertaUjian::with('ujian')->findOrFail($sesi_id);
 
-        // Cek apakah waktu sudah habis di server
+        // 1. CEK STATUS: Jika sudah selesai, JANGAN izinkan masuk ruang ujian lagi!
+        // Langsung lempar kembali ke Dashboard.
+        if ($sesi->status === 'selesai') {
+            return redirect()->route('dashboard')->with('success', 'Ujian ini sudah Anda selesaikan!');
+        }
+
+        // 2. CEK WAKTU: Cek apakah waktu sudah habis di server
         if (now()->greaterThanOrEqualTo($sesi->batas_waktu)) {
-            abort(403, 'Waktu ujian telah habis.');
+            // Ubah status jadi selesai jika dia memaksa masuk saat waktu sudah habis
+            $sesi->update(['status' => 'selesai']);
+
+            return redirect()->route('dashboard')->with('error', 'Waktu ujian telah habis.');
         }
 
         // 2. Ambil Semua Soal asli berdasarkan Peta Acakan
@@ -134,6 +144,7 @@ class UjianController extends Controller
                 'no' => $peta['no'],
                 'tipe' => $soalAsli->tipe_soal,
                 'tanya' => $soalAsli->pertanyaan,
+                'gambar' => $soalAsli->file_gambar,
                 'opsi' => $opsiTampil,
             ];
         });
@@ -277,5 +288,26 @@ class UjianController extends Controller
 
         // 6. Lempar Siswa ke Dashboard dengan membawa Pesan Nilai
         return redirect('/dashboard')->with('success', '🎉 Ujian Selesai! Nilai Anda: '.round($sesi->nilai_akhir, 2));
+    }
+
+    public function index()
+    {
+        // Ambil semua kategori ujian BESERTA data ujian di dalamnya
+        // (Bisa ditambahkan kondisi where() jika ingin menampilkan ujian yang aktif saja)
+        $kategoriUjians = KategoriUjian::with('ujians')->get();
+
+        return Inertia::render('Siswa/DaftarUjian', [
+            'kategoriUjians' => $kategoriUjians,
+        ]);
+    }
+
+    public function persiapan($id)
+    {
+        // Mengambil data ujian dan menghitung jumlah soal yang terkait
+        $ujian = Ujian::with('kategoriUjian')->withCount('soals')->findOrFail($id);
+
+        return Inertia::render('Siswa/PersiapanUjian', [
+            'ujian' => $ujian,
+        ]);
     }
 }

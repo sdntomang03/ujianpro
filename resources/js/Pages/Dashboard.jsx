@@ -1,24 +1,8 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link } from '@inertiajs/react';
 
-export default function Dashboard({ auth }) {
-    // Data Dummy untuk memperlihatkan desain (Nanti bisa diganti dengan data asli dari database)
-    const statistik = [
-        { title: 'Ujian Diselesaikan', value: '12', icon: '📝', color: 'text-indigo-600', bg: 'bg-indigo-50' },
-        { title: 'Nilai Rata-rata', value: '85.5', icon: '🎯', color: 'text-emerald-600', bg: 'bg-emerald-50' },
-        { title: 'Sertifikat', value: '3', icon: '🏆', color: 'text-amber-600', bg: 'bg-amber-50' },
-    ];
-
-    const ujianTersedia = [
-        { id: 1, judul: 'Tryout Premium Intensif (UTBK 2026)', mapel: 'Campuran', durasi: '90 Menit', soal: 6, status: 'Baru' },
-        // Kamu bisa menambah data dummy lain di sini untuk melihat bentuk grid-nya
-    ];
-
-    const riwayatUjian = [
-        { id: 101, judul: 'Simulasi Matematika Dasar', tanggal: '28 Mar 2026', nilai: 92.00, status: 'Lulus' },
-        { id: 102, judul: 'Kuis Bahasa Inggris Peminatan', tanggal: '25 Mar 2026', nilai: 78.50, status: 'Lulus' },
-        { id: 103, judul: 'Tryout Fisika Kuantum', tanggal: '20 Mar 2026', nilai: 55.00, status: 'Remedial' },
-    ];
+// MENANGKAP DATA ASLI DARI LARAVEL MELALUI PROPS
+export default function Dashboard({ auth, statistik, ujianTersedia, riwayatUjian }) {
 
     return (
         <AuthenticatedLayout
@@ -59,7 +43,7 @@ export default function Dashboard({ auth }) {
                     </div>
                 </div>
 
-                {/* 2. STATISTIK CEPAT */}
+                {/* 2. STATISTIK CEPAT (BACA DARI DATABASE) */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {statistik.map((stat, index) => (
                         <div key={index} className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200/60 flex items-center gap-5 transition-all hover:shadow-md hover:-translate-y-1">
@@ -74,7 +58,7 @@ export default function Dashboard({ auth }) {
                     ))}
                 </div>
 
-                {/* 3. KONTEN UTAMA (Kiri: Ujian Tersedia, Kanan: Riwayat) */}
+                {/* 3. KONTEN UTAMA */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
 
                     {/* KOLOM KIRI (Lebar 2/3) - Daftar Ujian */}
@@ -86,46 +70,53 @@ export default function Dashboard({ auth }) {
                             </h3>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {ujianTersedia.map((ujian) => (
-                                <div key={ujian.id} className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/60 flex flex-col h-full transition-all duration-300 hover:shadow-xl hover:shadow-indigo-100 hover:-translate-y-1 group">
-                                    <div className="flex justify-between items-start mb-4">
-                                        <span className="px-3 py-1 bg-indigo-50 text-indigo-700 text-xs font-bold uppercase tracking-widest rounded-lg border border-indigo-100">
-                                            {ujian.mapel}
-                                        </span>
-                                        <span className="flex items-center gap-1 text-xs font-bold text-rose-500 bg-rose-50 px-2.5 py-1 rounded-md">
-                                            <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
-                                            {ujian.status}
-                                        </span>
-                                    </div>
-
-                                    <h4 className="text-xl font-black text-slate-900 mb-2 group-hover:text-indigo-600 transition-colors line-clamp-2">
-                                        {ujian.judul}
-                                    </h4>
-
-                                    <div className="flex items-center gap-4 text-sm font-semibold text-slate-500 mb-8">
-                                        <div className="flex items-center gap-1.5">
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                                            {ujian.durasi}
+                        {ujianTersedia.length === 0 ? (
+                            <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200/60 text-center">
+                                <span className="text-4xl">😴</span>
+                                <h4 className="font-bold text-slate-700 mt-4">Belum Ada Ujian</h4>
+                                <p className="text-sm text-slate-500 mt-1">Saat ini tidak ada ujian yang dijadwalkan untuk Anda.</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {ujianTersedia.map((ujian) => (
+                                    <div key={ujian.id} className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/60 flex flex-col h-full transition-all duration-300 hover:shadow-xl hover:shadow-indigo-100 hover:-translate-y-1 group">
+                                        <div className="flex justify-between items-start mb-4">
+                                            <span className="px-3 py-1 bg-indigo-50 text-indigo-700 text-xs font-bold uppercase tracking-widest rounded-lg border border-indigo-100">
+                                                {ujian.mapel}
+                                            </span>
+                                            <span className="flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-100">
+                                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                                {ujian.status}
+                                            </span>
                                         </div>
-                                        <div className="flex items-center gap-1.5">
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                                            {ujian.soal} Soal
+
+                                        <h4 className="text-xl font-black text-slate-900 mb-2 group-hover:text-indigo-600 transition-colors line-clamp-2">
+                                            {ujian.judul}
+                                        </h4>
+
+                                        <div className="flex items-center gap-4 text-sm font-semibold text-slate-500 mb-8">
+                                            <div className="flex items-center gap-1.5">
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                                {ujian.durasi}
+                                            </div>
+                                            <div className="flex items-center gap-1.5">
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                                                {ujian.soal} Soal
+                                            </div>
+                                        </div>
+
+                                        <div className="mt-auto">
+                                            <Link
+                                                href={`/ujian/${ujian.id}/mulai`}
+                                                className="block w-full text-center bg-slate-900 hover:bg-indigo-600 text-white font-bold py-3 px-4 rounded-xl transition-colors shadow-md"
+                                            >
+                                                Kerjakan Sekarang &rarr;
+                                            </Link>
                                         </div>
                                     </div>
-
-                                    <div className="mt-auto">
-                                        {/* LINK MENUJU CONTROLLER MULAI UJIAN YANG SUDAH KITA BUAT */}
-                                        <Link
-                                            href={`/ujian/${ujian.id}/mulai`}
-                                            className="block w-full text-center bg-slate-900 hover:bg-indigo-600 text-white font-bold py-3 px-4 rounded-xl transition-colors shadow-md"
-                                        >
-                                            Kerjakan Sekarang &rarr;
-                                        </Link>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
 
                     {/* KOLOM KANAN (Lebar 1/3) - Riwayat Nilai */}
@@ -139,25 +130,31 @@ export default function Dashboard({ auth }) {
                         </div>
 
                         <div className="bg-white rounded-3xl shadow-sm border border-slate-200/60 overflow-hidden">
-                            <div className="divide-y divide-slate-100">
-                                {riwayatUjian.map((riwayat) => {
-                                    const isLulus = riwayat.status === 'Lulus';
-                                    return (
-                                        <div key={riwayat.id} className="p-5 hover:bg-slate-50 transition-colors">
-                                            <div className="flex justify-between items-start mb-2">
-                                                <h4 className="font-bold text-slate-800 text-sm line-clamp-2 pr-4">{riwayat.judul}</h4>
-                                                <div className={`flex-shrink-0 px-2.5 py-1 rounded-lg text-xs font-black ${isLulus ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                                                    {riwayat.nilai.toFixed(2)}
+                            {riwayatUjian.length === 0 ? (
+                                <div className="p-6 text-center text-sm font-medium text-slate-400">
+                                    Belum ada ujian yang diselesaikan.
+                                </div>
+                            ) : (
+                                <div className="divide-y divide-slate-100">
+                                    {riwayatUjian.map((riwayat) => {
+                                        const isLulus = riwayat.status === 'Lulus';
+                                        return (
+                                            <div key={riwayat.id} className="p-5 hover:bg-slate-50 transition-colors">
+                                                <div className="flex justify-between items-start mb-2">
+                                                    <h4 className="font-bold text-slate-800 text-sm line-clamp-2 pr-4">{riwayat.judul}</h4>
+                                                    <div className={`flex-shrink-0 px-2.5 py-1 rounded-lg text-xs font-black ${isLulus ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                                                        {riwayat.nilai.toFixed(2)}
+                                                    </div>
+                                                </div>
+                                                <div className="flex justify-between items-center text-xs font-semibold">
+                                                    <span className="text-slate-400">{riwayat.tanggal}</span>
+                                                    <span className={isLulus ? 'text-emerald-600' : 'text-rose-600'}>{riwayat.status}</span>
                                                 </div>
                                             </div>
-                                            <div className="flex justify-between items-center text-xs font-semibold">
-                                                <span className="text-slate-400">{riwayat.tanggal}</span>
-                                                <span className={isLulus ? 'text-emerald-600' : 'text-rose-600'}>{riwayat.status}</span>
-                                            </div>
-                                        </div>
-                                    )
-                                })}
-                            </div>
+                                        )
+                                    })}
+                                </div>
+                            )}
                         </div>
                     </div>
 

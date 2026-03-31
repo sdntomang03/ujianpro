@@ -29,4 +29,10 @@ class Ujian extends Model
     {
         return $this->hasMany(PesertaUjian::class);
     }
+
+    // Ujian ini milik 1 Kategori Ujian
+    public function kategoriUjian()
+    {
+        return $this->belongsTo(KategoriUjian::class);
+    }
 }

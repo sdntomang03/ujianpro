@@ -13,7 +13,11 @@ return new class extends Migration
     {
         Schema::create('kategoris', function (Blueprint $table) {
             $table->id();
-            $table->string('nama_kategori'); // Misal: "Matematika Dasar"
+
+            // PASTIKAN BARIS INI ADA DAN TULISANNYA BENAR:
+            $table->string('nama_kategori');
+            $table->text('deskripsi')->nullable();
+
             $table->timestamps();
         });
     }
