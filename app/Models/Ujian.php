@@ -35,4 +35,10 @@ class Ujian extends Model
     {
         return $this->belongsTo(KategoriUjian::class);
     }
+
+    public function pesertas(): HasMany
+    {
+        // Pastikan nama modelnya adalah PesertaUjian
+        return $this->hasMany(PesertaUjian::class, 'ujian_id');
+    }
 }
