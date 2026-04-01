@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\Kategori;
+use App\Models\Kategori; // Digunakan untuk Bank Soal (berdasarkan Seeder Anda)
 use App\Models\KategoriUjian;
 use App\Models\Soal;
 use Illuminate\Http\Request;
@@ -32,10 +32,10 @@ class BankSoalController extends Controller
         ]);
     }
 
-    // METHOD BARU: Buka halaman Tambah
     public function create()
     {
-        $kategori = KategoriUjian::all();
+        // Diperbaiki: Menggunakan Kategori, bukan KategoriUjian (Karena KategoriUjian untuk jadwal)
+        $kategori = Kategori::all();
 
         return Inertia::render('Admin/BankSoal/Create', [
             'kategori' => $kategori,
@@ -52,107 +52,110 @@ class BankSoalController extends Controller
             'bobot_nilai' => 'required|integer',
         ]);
 
-        // Upload Gambar
+        // 2. Upload Gambar (Opsional)
         $pathGambar = null;
         if ($request->hasFile('gambar')) {
             $pathGambar = $request->file('gambar')->store('soal_images', 'public');
         }
 
-        // Siapkan variabel untuk menampung JSON kunci jawaban
-        $final_kunci = null;
-
-        // --- A. LOGIKA FORMAT KUNCI JAWABAN (SESUAI SEEDER) ---
-
-        if ($request->tipe_soal === 'pg') {
-            // Seeder: 'kunci_jawaban' => ['Jakarta']
-            // React ngirim integer index (misal: 0). Kita ambil teks aslinya dari array opsi.
-            $teksKunci = $request->opsi[$request->kunci_jawaban];
-            $final_kunci = [$teksKunci];
-        } elseif ($request->tipe_soal === 'pg_kompleks') {
-            // Seeder: 'kunci_jawaban' => ['JavaScript', 'Python']
-            // React ngirim array of index [0, 2].
-            $kunciArray = [];
-            foreach ($request->kunci_kompleks as $idx) {
-                $kunciArray[] = $request->opsi[$idx];
-            }
-            $final_kunci = $kunciArray;
-        } elseif ($request->tipe_soal === 'isian') {
-            // Seeder: 'kunci_jawaban' => ['Sapi', 'Kambing']
-            // React ngirim text comma-separated: "Sapi, Kambing"
-            // Kita pecah menjadi array dan bersihkan spasi
-            $kunciArray = array_map('trim', explode(',', $request->kunci_isian));
-            $final_kunci = $kunciArray;
-        } elseif ($request->tipe_soal === 'menjodohkan') {
-            // Seeder: 'kunci_jawaban' => ['L1' => 'R2', 'L2' => 'R3', 'L3' => 'R1']
-            $kunciMap = [];
-            foreach ($request->pasangan as $index => $pair) {
-                $idx = $index + 1; // Mulai dari 1
-                $kunciMap["L{$idx}"] = "R{$idx}"; // Karena input dari React berpasangan langsung L1=R1
-            }
-            $final_kunci = $kunciMap;
-        } elseif ($request->tipe_soal === 'benar_salah') {
-            // Seeder: 'kunci_jawaban' => ['row_0' => 'Salah', 'row_1' => 'Benar']
-            $kunciMap = [];
-            foreach ($request->pernyataan_bs as $index => $item) {
-                $kunciMap["row_{$index}"] = $item['kunci']; // "Benar" atau "Salah"
-            }
-            $final_kunci = $kunciMap;
-        }
-
-        // --- B. SIMPAN DATA INDUK KE TABEL SOALS ---
+        // 3. Simpan Data Induk Soal (kunci_jawaban dikosongkan dulu, khusus menjodohkan diupdate belakangan)
         $soal = Soal::create([
             'kategori_id' => $request->kategori_id,
             'tipe_soal' => $request->tipe_soal,
             'pertanyaan' => $request->pertanyaan,
             'file_gambar' => $pathGambar,
             'bobot_nilai' => $request->bobot_nilai,
-            // JSON Encode akan otomatis mengubah array PHP menjadi JSON valid untuk database
-            'kunci_jawaban' => $final_kunci ? json_encode($final_kunci) : null,
+            'kunci_jawaban' => null, // Default null, karena kita pakai relasi is_correct sekarang
         ]);
 
-        // --- C. SIMPAN KE TABEL SOAL_OPSIS (SESUAI SEEDER) ---
+        // 4. LOGIKA PENYIMPANAN OPSI JAWABAN BERDASARKAN TIPE
 
+        // A. Pilihan Ganda & PG Kompleks & Survei
         if (in_array($request->tipe_soal, ['pg', 'pg_kompleks', 'survei'])) {
-            // Seeder: Hanya simpan teksnya saja (group = null)
-            foreach ($request->opsi as $teksOpsi) {
-                $soal->opsis()->create(['teks_opsi' => $teksOpsi]);
-            }
-        } elseif ($request->tipe_soal === 'benar_salah') {
-            // Seeder: Hanya simpan teks opsinya, tanpa group
-            foreach ($request->pernyataan_bs as $item) {
-                $soal->opsis()->create(['teks_opsi' => $item['teks']]);
-            }
-        } elseif ($request->tipe_soal === 'menjodohkan') {
-            // Seeder: Simpan kiri (group='kiri') dan kanan (group='kanan')
-            // Namun, untuk menghindari data kembar jika 2 premis punya jawaban kanan yg sama persis,
-            // kita kumpulkan dulu.
-            $kiriArray = [];
-            $kananArray = [];
+            foreach ($request->opsi as $index => $teksOpsi) {
+                $isCorrect = false;
 
-            foreach ($request->pasangan as $pair) {
-                $kiriArray[] = $pair['kiri'];
-                $kananArray[] = $pair['kanan'];
-            }
+                // Cek apakah index opsi ini adalah jawaban yang benar
+                if ($request->tipe_soal === 'pg' && $request->kunci_jawaban == $index) {
+                    $isCorrect = true;
+                } elseif ($request->tipe_soal === 'pg_kompleks' && in_array($index, $request->kunci_kompleks)) {
+                    $isCorrect = true;
+                }
 
-            // Simpan Kiri
-            foreach ($kiriArray as $teks) {
-                $soal->opsis()->create(['teks_opsi' => $teks, 'group' => 'kiri']);
-            }
-            // Simpan Kanan (Diambil unik agar tidak ada opsi ganda di layar siswa)
-            foreach (array_unique($kananArray) as $teks) {
-                $soal->opsis()->create(['teks_opsi' => $teks, 'group' => 'kanan']);
+                $soal->opsis()->create([
+                    'teks_opsi' => $teksOpsi,
+                    'is_correct' => $isCorrect,
+                ]);
             }
         }
-        // Catatan: Tipe 'isian' tidak menyimpan apapun ke SoalOpsi (sesuai Seeder Anda).
 
-        return redirect()->route('admin.bank-soal.index')->with('success', 'Soal berhasil disimpan dengan format Seeder!');
+        // B. Benar / Salah Majemuk
+        elseif ($request->tipe_soal === 'benar_salah') {
+            foreach ($request->pernyataan_bs as $item) {
+                // Jika kunci dari React "Benar", jadikan true. Jika "Salah", jadikan false.
+                $isCorrect = ($item['kunci'] === 'Benar') ? true : false;
+
+                $soal->opsis()->create([
+                    'teks_opsi' => $item['teks'],
+                    'is_correct' => $isCorrect,
+                ]);
+            }
+        }
+
+        // C. Isian Singkat
+        elseif ($request->tipe_soal === 'isian') {
+            // Memecah "Sapi, Kambing" menjadi array opsi benar
+            $kunciArray = array_map('trim', explode(',', $request->kunci_isian));
+            foreach ($kunciArray as $kunci) {
+                $soal->opsis()->create([
+                    'teks_opsi' => $kunci,
+                    'is_correct' => true,
+                ]);
+            }
+        }
+
+        // D. Menjodohkan (Peta Relasi ID Kiri -> ID Kanan)
+        elseif ($request->tipe_soal === 'menjodohkan') {
+            $kunciMap = [];
+
+            foreach ($request->pasangan as $index => $pair) {
+                $idx = $index + 1;
+
+                // Simpan Opsi Kiri & Dapatkan ID-nya
+                $opsiKiri = $soal->opsis()->create([
+                    'teks_opsi' => $pair['kiri'],
+                    'group' => "L{$idx}",
+                    'is_correct' => false,
+                ]);
+
+                // Simpan Opsi Kanan & Dapatkan ID-nya
+                $opsiKanan = $soal->opsis()->firstOrCreate(
+                    [
+                        'soal_id' => $soal->id,
+                        'teks_opsi' => $pair['kanan'],
+                        'group' => "R{$idx}",
+                    ],
+                    ['is_correct' => false]
+                );
+
+                // Petakan ID_Kiri => ID_Kanan
+                $kunciMap[$opsiKiri->id] = $opsiKanan->id;
+            }
+
+            // Update tabel 'soals' dengan JSON pemetaan ID
+            $soal->update([
+                'kunci_jawaban' => json_encode($kunciMap),
+            ]);
+        }
+
+        return redirect()->route('admin.bank-soal.index')->with('success', 'Soal berhasil disimpan secara Relasional!');
     }
 
-    // METHOD BARU: Buka halaman Edit
     public function edit($id)
     {
-        $soal = Soal::findOrFail($id);
-        $kategori = KategoriUjian::all();
+        // Pastikan relasi opsi dimuat agar bisa ditampilkan di form Edit React nantinya
+        $soal = Soal::with('opsis')->findOrFail($id);
+        $kategori = Kategori::all(); // Diperbaiki: Menggunakan Kategori
 
         return Inertia::render('Admin/BankSoal/Edit', [
             'soal' => $soal,
@@ -162,20 +165,27 @@ class BankSoalController extends Controller
 
     public function update(Request $request, $id)
     {
+        // Logika Update akan mirip dengan Store (hapus opsi lama, buat opsi baru, update parent soal)
+        // Saat ini masih menggunakan struktur dasar dari Anda
         $request->validate([
-            'kategori_ujian_id' => 'required|exists:kategori_ujians,id',
+            'kategori_id' => 'required|exists:kategoris,id',
             'pertanyaan' => 'required|string',
-            // ... validasi lainnya sama seperti store
+            'tipe_soal' => 'required',
         ]);
 
-        Soal::findOrFail($id)->update($request->all());
+        Soal::findOrFail($id)->update([
+            'kategori_id' => $request->kategori_id,
+            'tipe_soal' => $request->tipe_soal,
+            'pertanyaan' => $request->pertanyaan,
+            'bobot_nilai' => $request->bobot_nilai,
+        ]);
 
-        // Redirect kembali ke index
         return redirect()->route('admin.bank-soal.index')->with('success', 'Soal berhasil diperbarui.');
     }
 
     public function destroy($id)
     {
+        // Cascade on delete di database akan otomatis menghapus data di tabel soal_opsis
         Soal::findOrFail($id)->delete();
 
         return back()->with('success', 'Soal berhasil dihapus.');

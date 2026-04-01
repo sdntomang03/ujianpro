@@ -13,16 +13,23 @@ return new class extends Migration
     {
         Schema::create('soals', function (Blueprint $table) {
             $table->id();
+
+            // Relasi ke tabel kategori (Pastikan tabel 'kategoris' sudah dibuat sebelumnya)
             $table->foreignId('kategori_id')->constrained('kategoris')->cascadeOnDelete();
+
             $table->string('tipe_soal'); // pg, pg_kompleks, isian, menjodohkan, benar_salah, survei
-            $table->text('pertanyaan');
 
-            // --- TAMBAHKAN KOLOM GAMBAR DI SINI ---
-            $table->string('file_gambar')->nullable(); // nullable karena tidak semua soal punya gambar
+            // Teks pertanyaan dibuat nullable karena tipe Benar/Salah (opsional) mungkin tidak butuh teks parent
+            $table->text('pertanyaan')->nullable();
 
-            // Kunci Jawaban disimpan di sini (JSON) agar aman dan terpisah dari opsi untuk siswa
+            // Lampiran gambar utama soal
+            $table->string('file_gambar')->nullable();
+
+            // Kunci Jawaban JSON HANYA dipakai untuk soal Menjodohkan (menyimpan peta ID Kiri ke ID Kanan)
             $table->json('kunci_jawaban')->nullable();
+
             $table->integer('bobot_nilai')->default(10);
+
             $table->timestamps();
         });
     }

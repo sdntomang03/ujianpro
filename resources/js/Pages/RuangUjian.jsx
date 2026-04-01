@@ -7,16 +7,23 @@ export default function RuangUjian({ auth, sesi, dataSoal, errors }) {
     // ------------------------------------------------------------------------------------
     const [indeksAktif, setIndeksAktif] = useState(0);
     const [jawabanSiswa, setJawabanSiswa] = useState({});
+
+    // 🔥 STATE BARU: RAGU-RAGU
+    const [raguRagu, setRaguRagu] = useState({});
+
     const [selectedLeft, setSelectedLeft] = useState(null);
     const [isFullscreen, setIsFullscreen] = useState(false);
 
-    // STATE BARU: Aksesibilitas Font & Lightbox Gambar
-    const [fontSize, setFontSize] = useState(1); // 0: Kecil, 1: Sedang (Default), 2: Besar
+    // Aksesibilitas Font & Lightbox Gambar
+    const [fontSize, setFontSize] = useState(1);
     const [showLightbox, setShowLightbox] = useState(false);
     const [zoomLevel, setZoomLevel] = useState(1);
 
     const soalSekarang = dataSoal[indeksAktif];
+
+    // Identifier unik untuk LocalStorage
     const idUjianUnik = `cbt_jawaban_${sesi.id}`;
+    const idRaguUnik = `cbt_ragu_${sesi.id}`;
 
     // Timer Akurat dari Server
     const hitungSisaDetik = () => {
@@ -71,7 +78,7 @@ export default function RuangUjian({ auth, sesi, dataSoal, errors }) {
         }
     };
 
-    // Load Memori & Reset View
+    // Load Memori Jawaban & Ragu-ragu dari LocalStorage
     const containerRef = useRef(null);
     const leftRefs = useRef({});
     const rightRefs = useRef({});
@@ -79,14 +86,20 @@ export default function RuangUjian({ auth, sesi, dataSoal, errors }) {
 
     useEffect(() => {
         try {
-            const memori = localStorage.getItem(idUjianUnik);
-            if (memori) setJawabanSiswa(JSON.parse(memori));
-        } catch (e) { localStorage.removeItem(idUjianUnik); }
-    }, [idUjianUnik]);
+            const memoriJawaban = localStorage.getItem(idUjianUnik);
+            if (memoriJawaban) setJawabanSiswa(JSON.parse(memoriJawaban));
+
+            const memoriRagu = localStorage.getItem(idRaguUnik);
+            if (memoriRagu) setRaguRagu(JSON.parse(memoriRagu));
+        } catch (e) {
+            localStorage.removeItem(idUjianUnik);
+            localStorage.removeItem(idRaguUnik);
+        }
+    }, [idUjianUnik, idRaguUnik]);
 
     useEffect(() => {
         setSelectedLeft(null);
-        setZoomLevel(1); // Reset zoom gambar saat pindah soal
+        setZoomLevel(1);
     }, [indeksAktif]);
 
     // Logic Garis Anti-Pecah
@@ -94,22 +107,25 @@ export default function RuangUjian({ auth, sesi, dataSoal, errors }) {
         const gambarGaris = () => {
             if (soalSekarang.tipe !== 'menjodohkan' || !containerRef.current) return;
             const containerBox = containerRef.current.getBoundingClientRect();
-            const connections = Array.isArray(jawabanSiswa[soalSekarang.id]) ? jawabanSiswa[soalSekarang.id] : [];
 
-            const daftarGaris = connections.map(conn => {
-                const elemenKiri = leftRefs.current[conn.from];
-                const elemenKanan = rightRefs.current[conn.to];
+            const connections = (typeof jawabanSiswa[soalSekarang.id] === 'object' && !Array.isArray(jawabanSiswa[soalSekarang.id]) && jawabanSiswa[soalSekarang.id] !== null)
+                                ? jawabanSiswa[soalSekarang.id] : {};
+
+            const daftarGaris = Object.entries(connections).map(([from, to]) => {
+                const elemenKiri = leftRefs.current[from];
+                const elemenKanan = rightRefs.current[to];
                 if (elemenKiri && elemenKanan) {
                     const boxKiri = elemenKiri.getBoundingClientRect();
                     const boxKanan = elemenKanan.getBoundingClientRect();
                     return {
-                        id: `${conn.from}-${conn.to}`,
+                        id: `${from}-${to}`,
                         x1: boxKiri.right - containerBox.left, y1: (boxKiri.top + boxKiri.height / 2) - containerBox.top,
                         x2: boxKanan.left - containerBox.left, y2: (boxKanan.top + boxKanan.height / 2) - containerBox.top
                     };
                 }
                 return null;
             }).filter(Boolean);
+
             setGarisKoordinat(daftarGaris);
         };
         const timer = setTimeout(gambarGaris, 50);
@@ -120,10 +136,10 @@ export default function RuangUjian({ auth, sesi, dataSoal, errors }) {
             window.removeEventListener('resize', gambarGaris);
             window.removeEventListener('scroll', gambarGaris, true);
         };
-    }, [jawabanSiswa, indeksAktif, soalSekarang, fontSize]); // Ditambah fontSize agar garis update saat huruf membesar
+    }, [jawabanSiswa, indeksAktif, soalSekarang, fontSize]);
 
     // ------------------------------------------------------------------------------------
-    // 2. FUNGSI PENYIMPAN JAWABAN (SMART AUTO-SAVE)
+    // 2. FUNGSI PENYIMPAN JAWABAN & TOGGLE RAGU-RAGU
     // ------------------------------------------------------------------------------------
     const handleSimpanJawaban = (idSoal, tipeSoal, dataJawaban) => {
         let jawabanBaru = { ...jawabanSiswa };
@@ -146,9 +162,36 @@ export default function RuangUjian({ auth, sesi, dataSoal, errors }) {
         setJawabanSiswa(jawabanBaru);
         localStorage.setItem(idUjianUnik, JSON.stringify(jawabanBaru));
 
+        // Ambil status ragu-ragu saat ini (default false jika belum ada)
+        const isRagu = raguRagu[idSoal] || false;
+
         router.post(`/ujian/${sesi.id}/simpan-jawaban`, {
             soal_id: idSoal,
-            jawaban: jawabanBaru[idSoal]
+            jawaban: jawabanBaru[idSoal],
+            is_ragu: isRagu // Kirim status ragu-ragu ke server
+        }, {
+            preserveState: true, preserveScroll: true, replace: true,
+        });
+    };
+
+    // 🔥 FUNGSI BARU: TOGGLE RAGU-RAGU
+    const handleToggleRagu = () => {
+        const idSoal = soalSekarang.id;
+        const statusBaru = !raguRagu[idSoal]; // Balikkan status (true -> false, false -> true)
+
+        // Update state dan localstorage
+        const raguBaru = { ...raguRagu, [idSoal]: statusBaru };
+        setRaguRagu(raguBaru);
+        localStorage.setItem(idRaguUnik, JSON.stringify(raguBaru));
+
+        // Kirim update ke server TANPA mengubah jawaban
+        // (Kita kirim jawaban yang sudah ada, tapi status is_ragu-nya yang diubah)
+        const jawabanCurrent = jawabanSiswa[idSoal] || null;
+
+        router.post(`/ujian/${sesi.id}/simpan-jawaban`, {
+            soal_id: idSoal,
+            jawaban: jawabanCurrent,
+            is_ragu: statusBaru
         }, {
             preserveState: true, preserveScroll: true, replace: true,
         });
@@ -161,6 +204,7 @@ export default function RuangUjian({ auth, sesi, dataSoal, errors }) {
     const fontBase = fontSize === 0 ? "text-sm md:text-base" : fontSize === 1 ? "text-base md:text-lg" : "text-lg md:text-xl";
     const fontSmall = fontSize === 0 ? "text-xs md:text-sm" : fontSize === 1 ? "text-sm md:text-base" : "text-base md:text-lg";
     const fontXSmall = fontSize === 0 ? "text-[10px] md:text-xs" : fontSize === 1 ? "text-xs sm:text-sm md:text-base" : "text-sm sm:text-base md:text-lg";
+
     const renderLembarSoal = () => {
         const id = soalSekarang.id;
         const jawabanCurrent = jawabanSiswa[id];
@@ -213,15 +257,20 @@ export default function RuangUjian({ auth, sesi, dataSoal, errors }) {
                 );
 
             case 'menjodohkan':
-                const connections = Array.isArray(jawabanCurrent) ? jawabanCurrent : [];
+                const connections = (typeof jawabanCurrent === 'object' && jawabanCurrent !== null && !Array.isArray(jawabanCurrent)) ? jawabanCurrent : {};
+
                 const handleConnect = (rightId) => {
                     if (selectedLeft) {
-                        const connectionsBaru = connections.filter(c => c.from !== selectedLeft && c.to !== rightId);
-                        connectionsBaru.push({ from: selectedLeft, to: rightId });
+                        const connectionsBaru = { ...connections };
+                        for (let key in connectionsBaru) {
+                            if (connectionsBaru[key] === rightId) delete connectionsBaru[key];
+                        }
+                        connectionsBaru[selectedLeft] = rightId;
                         handleSimpanJawaban(id, 'menjodohkan', connectionsBaru);
                         setSelectedLeft(null);
                     }
                 };
+
                 return (
                     <div ref={containerRef} className="p-3 sm:p-6 md:p-8 bg-slate-50/50 rounded-2xl md:rounded-3xl relative border border-slate-200 mt-4 md:mt-6 shadow-inner overflow-hidden">
                         <svg className="absolute top-0 left-0 w-full h-full pointer-events-none z-0">
@@ -231,16 +280,16 @@ export default function RuangUjian({ auth, sesi, dataSoal, errors }) {
                         </svg>
 
                         <div className="flex justify-end mb-4 relative z-20">
-                            <button onClick={() => { handleSimpanJawaban(id, 'menjodohkan', []); setSelectedLeft(null); }} className="text-[10px] sm:text-xs bg-white border border-rose-200 text-rose-600 font-bold px-3 py-1.5 md:px-4 md:py-2 rounded-full hover:bg-rose-50 transition-all shadow-sm">
+                            <button onClick={() => { handleSimpanJawaban(id, 'menjodohkan', {}); setSelectedLeft(null); }} className="text-[10px] sm:text-xs bg-white border border-rose-200 text-rose-600 font-bold px-3 py-1.5 md:px-4 md:py-2 rounded-full hover:bg-rose-50 transition-all shadow-sm">
                                 Reset Garis
                             </button>
                         </div>
 
                         <div className="grid grid-cols-2 gap-3 sm:gap-8 md:gap-20 relative z-10">
                             <div className="space-y-3 md:space-y-4">
-                                <h5 className="font-bold text-slate-500 uppercase tracking-widest text-[10px] md:text-xs text-center mb-1">Pernyataan</h5>
+                                <h5 className="font-bold text-slate-500 uppercase tracking-widest text-[10px] md:text-xs text-center mb-1">Pernyataan (Kiri)</h5>
                                 {soalSekarang.opsi.left.map(item => {
-                                    const isConnected = connections.some(c => c.from === item.id);
+                                    const isConnected = connections[item.id] !== undefined;
                                     const isSelected = selectedLeft === item.id;
                                     return (
                                         <div key={item.id} ref={el => leftRefs.current[item.id] = el} onClick={() => setSelectedLeft(item.id)} className={`p-2.5 sm:p-4 md:p-5 bg-white border-2 rounded-xl md:rounded-2xl cursor-pointer flex justify-between items-center transition-all duration-200 relative ${isSelected ? 'border-indigo-500 ring-2 md:ring-4 ring-indigo-50 shadow-md scale-[1.02]' : 'border-slate-200 hover:border-indigo-300 shadow-sm'}`}>
@@ -252,9 +301,9 @@ export default function RuangUjian({ auth, sesi, dataSoal, errors }) {
                             </div>
 
                             <div className="space-y-3 md:space-y-4">
-                                <h5 className="font-bold text-slate-500 uppercase tracking-widest text-[10px] md:text-xs text-center mb-1">Pasangan</h5>
+                                <h5 className="font-bold text-slate-500 uppercase tracking-widest text-[10px] md:text-xs text-center mb-1">Pasangan (Kanan)</h5>
                                 {soalSekarang.opsi.right.map(item => {
-                                    const isConnected = connections.some(c => c.to === item.id);
+                                    const isConnected = Object.values(connections).includes(item.id);
                                     return (
                                         <div key={item.id} ref={el => rightRefs.current[item.id] = el} onClick={() => handleConnect(item.id)} className={`p-2.5 sm:p-4 md:p-5 bg-white border-2 rounded-xl md:rounded-2xl flex justify-between items-center transition-all duration-200 cursor-pointer relative ${isConnected ? 'border-emerald-500 ring-2 md:ring-4 ring-emerald-50 shadow-md' : (selectedLeft ? 'border-amber-400 bg-amber-50/50' : 'border-slate-200 hover:border-emerald-300 shadow-sm')}`}>
                                             <div className={`w-2.5 h-2.5 md:w-4 md:h-4 rounded-full flex-shrink-0 mr-1.5 md:mr-3 transition-colors ${isConnected ? 'bg-emerald-500 ring-2 md:ring-4 ring-emerald-100' : 'bg-slate-200'}`}></div>
@@ -366,12 +415,6 @@ export default function RuangUjian({ auth, sesi, dataSoal, errors }) {
                         <svg className="w-4 h-4 md:w-5 md:h-5 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                         {formatWaktu(sisaWaktu)}
                     </div>
-
-                    <div className="hidden sm:flex items-center gap-3 pl-4 border-l border-slate-200">
-                        <div className="w-9 h-9 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-700 font-bold border border-indigo-200">
-                            {auth?.user?.name ? auth.user.name.charAt(0).toUpperCase() : 'S'}
-                        </div>
-                    </div>
                 </div>
             </nav>
 
@@ -387,7 +430,6 @@ export default function RuangUjian({ auth, sesi, dataSoal, errors }) {
                             </div>
 
                             <div className="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto">
-                                {/* PENGATUR UKURAN FONT (AKSESIBILITAS) */}
                                 <div className="flex items-center bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
                                     <button onClick={() => setFontSize(Math.max(0, fontSize - 1))} disabled={fontSize === 0} className="px-3 py-1.5 text-slate-500 hover:bg-slate-50 hover:text-indigo-600 disabled:opacity-30 disabled:hover:bg-white transition-colors" title="Perkecil Teks">
                                         <span className="font-bold text-sm">A-</span>
@@ -404,47 +446,49 @@ export default function RuangUjian({ auth, sesi, dataSoal, errors }) {
                         </div>
                         <div className="p-5 sm:p-8 md:p-10">
 
-                            {/* --- THUMBNAIL GAMBAR SOAL --- */}
                             {soalSekarang.gambar && (
-                                <div
-                                    onClick={() => setShowLightbox(true)}
-                                    className="mb-6 md:mb-8 rounded-xl border border-slate-200 shadow-sm bg-slate-50 flex items-center justify-center p-3 relative group cursor-zoom-in"
-                                    title="Klik untuk memperbesar gambar"
-                                >
+                                <div onClick={() => setShowLightbox(true)} className="mb-6 md:mb-8 rounded-xl border border-slate-200 shadow-sm bg-slate-50 flex items-center justify-center p-3 relative group cursor-zoom-in" title="Klik untuk memperbesar gambar">
                                     <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-md text-white rounded-lg p-2 opacity-0 group-hover:opacity-100 transition-all duration-300 transform scale-90 group-hover:scale-100 shadow-lg">
                                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"></path></svg>
                                     </div>
-                                    <img
-                                        src={soalSekarang.gambar}
-                                        alt="Ilustrasi Soal"
-                                        className="max-h-[140px] md:max-h-[200px] w-auto object-contain rounded-lg transition-transform duration-500 group-hover:scale-[1.02]"
-                                        onError={(e) => { e.target.style.display = 'none'; }}
-                                    />
+                                    <img src={soalSekarang.gambar} alt="Ilustrasi Soal" className="max-h-[140px] md:max-h-[200px] w-auto object-contain rounded-lg transition-transform duration-500 group-hover:scale-[1.02]" onError={(e) => { e.target.style.display = 'none'; }} />
                                 </div>
                             )}
 
-  {/* MENGGUNAKAN DIV & DANGEROUSLY SET INNER HTML */}
-<div
-    className={`${fontTanya} text-slate-800 font-normal leading-relaxed mb-6 md:mb-8 transition-all space-y-4`}
-    dangerouslySetInnerHTML={{ __html: soalSekarang.tanya }}
-/>
+                            <div className={`${fontTanya} text-slate-800 font-normal leading-relaxed mb-6 md:mb-8 transition-all space-y-4`} dangerouslySetInnerHTML={{ __html: soalSekarang.tanya }} />
+
                             {renderLembarSoal()}
+
                         </div>
                     </div>
 
                     <div className="flex justify-between items-center p-3 md:p-4 bg-white rounded-xl md:rounded-2xl border border-slate-200/60 shadow-sm sticky bottom-3 md:bottom-4 z-30">
-                        <button onClick={() => setIndeksAktif(prev => Math.max(0, prev - 1))} disabled={indeksAktif === 0} className="flex items-center gap-1 md:gap-2 bg-white border-2 border-slate-200 text-slate-600 font-bold py-2.5 px-4 md:py-3 md:px-6 rounded-lg md:rounded-xl hover:bg-slate-50 hover:text-indigo-600 hover:border-indigo-200 disabled:opacity-40 transition-all text-xs md:text-base group">
+                        <button onClick={() => setIndeksAktif(prev => Math.max(0, prev - 1))} disabled={indeksAktif === 0} className="flex items-center gap-1 md:gap-2 bg-white border-2 border-slate-200 text-slate-600 font-bold py-2.5 px-3 md:py-3 md:px-5 rounded-lg md:rounded-xl hover:bg-slate-50 hover:text-indigo-600 hover:border-indigo-200 disabled:opacity-40 transition-all text-xs md:text-sm group">
                             <svg className="w-4 h-4 md:w-5 md:h-5 transition-transform group-hover:-translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
                             <span className="hidden sm:inline">Sebelumnya</span>
                         </button>
 
+                        {/* 🔥 TOMBOL RAGU-RAGU DI TENGAH BAWAH */}
+                        <button
+                            onClick={handleToggleRagu}
+                            className={`flex items-center gap-1.5 md:gap-2 border-2 font-bold py-2.5 px-4 md:py-3 md:px-6 rounded-lg md:rounded-xl transition-all text-xs md:text-sm shadow-sm ${
+                                raguRagu[soalSekarang.id]
+                                ? 'bg-amber-100 border-amber-400 text-amber-700 hover:bg-amber-200'
+                                : 'bg-white border-slate-200 text-slate-500 hover:bg-amber-50 hover:text-amber-600 hover:border-amber-300'
+                            }`}
+                        >
+                            <input type="checkbox" checked={raguRagu[soalSekarang.id] || false} readOnly className="w-4 h-4 text-amber-500 focus:ring-amber-500 rounded border-slate-300" />
+                            <span className="hidden sm:inline">Ragu-Ragu</span>
+                            <span className="sm:hidden">Ragu</span>
+                        </button>
+
                         {indeksAktif === dataSoal.length - 1 ? (
-                            <button onClick={() => { if(confirm("Yakin ingin mengakhiri ujian?")) { router.post(`/ujian/${sesi.id}/selesai`); } }} className="flex items-center gap-1.5 md:gap-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-bold py-2.5 px-5 md:py-3 md:px-8 rounded-lg md:rounded-xl shadow-lg shadow-emerald-200 transition-all transform hover:scale-105 active:scale-95 text-xs md:text-base">
+                            <button onClick={() => { if(confirm("Yakin ingin mengakhiri ujian? Pastikan tidak ada jawaban yang Ragu-ragu!")) { router.post(`/ujian/${sesi.id}/selesai`); } }} className="flex items-center gap-1.5 md:gap-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-bold py-2.5 px-4 md:py-3 md:px-6 rounded-lg md:rounded-xl shadow-lg shadow-emerald-200 transition-all transform hover:scale-105 active:scale-95 text-xs md:text-sm">
                                 <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
                                 Selesai
                             </button>
                         ) : (
-                            <button onClick={() => setIndeksAktif(prev => Math.min(dataSoal.length - 1, prev + 1))} className="flex items-center gap-1 md:gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-4 md:py-3 md:px-6 rounded-lg md:rounded-xl shadow-lg shadow-indigo-200 transition-all hover:scale-[1.02] active:scale-95 text-xs md:text-base group">
+                            <button onClick={() => setIndeksAktif(prev => Math.min(dataSoal.length - 1, prev + 1))} className="flex items-center gap-1 md:gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-3 md:py-3 md:px-5 rounded-lg md:rounded-xl shadow-lg shadow-indigo-200 transition-all hover:scale-[1.02] active:scale-95 text-xs md:text-sm group">
                                 <span className="hidden sm:inline">Selanjutnya</span>
                                 <svg className="w-4 h-4 md:w-5 md:h-5 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
                             </button>
@@ -466,52 +510,53 @@ export default function RuangUjian({ auth, sesi, dataSoal, errors }) {
                                 const j = jawabanSiswa[soal.id];
                                 const sudahDijawab = j !== undefined && j !== null && (Array.isArray(j) ? j.length > 0 : typeof j === 'object' ? Object.keys(j).length > 0 : typeof j === 'string' ? j.trim() !== '' : true);
                                 const sedangDibuka = indeksAktif === index;
+
+                                // 🔥 CEK STATUS RAGU-RAGU
+                                const isRagu = raguRagu[soal.id] || false;
+
+                                // 🔥 WARNA DINAMIS NAVIGASI SOAL
+                                let colorClass = 'bg-white border md:border-2 border-slate-200 text-slate-400 hover:border-indigo-300 hover:text-indigo-600'; // Default (Belum dijawab)
+
+                                if (sedangDibuka) {
+                                    colorClass = 'bg-indigo-600 border-none text-white ring-2 md:ring-4 ring-indigo-100 shadow-lg transform scale-110 z-10'; // Aktif
+                                } else if (isRagu) {
+                                    colorClass = 'bg-amber-100 border md:border-2 border-amber-400 text-amber-700 hover:bg-amber-500 hover:text-white'; // Ragu-ragu (Kuning/Amber)
+                                } else if (sudahDijawab) {
+                                    colorClass = 'bg-emerald-50 border md:border-2 border-emerald-400 text-emerald-700 hover:bg-emerald-500 hover:text-white'; // Dijawab (Hijau)
+                                }
+
                                 return (
-                                    <button key={soal.id} onClick={() => setIndeksAktif(index)} className={`w-full aspect-square flex items-center justify-center rounded-lg md:rounded-xl font-bold text-xs md:text-sm transition-all duration-300 ${ sedangDibuka ? 'bg-indigo-600 border-none text-white ring-2 md:ring-4 ring-indigo-100 shadow-lg transform scale-110 z-10' : sudahDijawab ? 'bg-emerald-50 border md:border-2 border-emerald-400 text-emerald-700 hover:bg-emerald-500 hover:text-white' : 'bg-white border md:border-2 border-slate-200 text-slate-400 hover:border-indigo-300 hover:text-indigo-600' }`}>
+                                    <button key={soal.id} onClick={() => setIndeksAktif(index)} className={`w-full aspect-square flex items-center justify-center rounded-lg md:rounded-xl font-bold text-xs md:text-sm transition-all duration-300 ${colorClass}`}>
                                         {soal.no}
                                     </button>
                                 );
                             })}
                         </div>
+
+                        {/* Legend Navigasi */}
+                        <div className="mt-6 flex flex-wrap gap-3 text-[10px] sm:text-xs text-slate-500 font-medium border-t border-slate-100 pt-4">
+                            <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-white border-2 border-slate-200 rounded-sm"></div> Belum</div>
+                            <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-emerald-100 border-2 border-emerald-400 rounded-sm"></div> Dijawab</div>
+                            <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-amber-100 border-2 border-amber-400 rounded-sm"></div> Ragu-ragu</div>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            {/* --- LIGHTBOX (MODAL) ZOOM GAMBAR --- */}
+            {/* --- LIGHTBOX MODAL --- */}
             {showLightbox && soalSekarang.gambar && (
                 <div className="fixed inset-0 z-[9999] bg-slate-900/95 backdrop-blur-sm flex items-center justify-center">
-                    {/* Header Controls */}
                     <div className="absolute top-0 w-full p-4 md:p-6 flex justify-between items-center bg-gradient-to-b from-black/60 to-transparent z-50">
-                        <div className="text-white/80 text-xs md:text-sm font-bold tracking-widest uppercase bg-black/30 px-4 py-2 rounded-full backdrop-blur-md">
-                            Pratinjau Gambar Soal
-                        </div>
-                        <button onClick={() => { setShowLightbox(false); setZoomLevel(1); }} className="bg-white/10 hover:bg-rose-500 text-white rounded-full p-2.5 md:p-3 transition-colors shadow-lg">
-                            <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
-                        </button>
+                        <div className="text-white/80 text-xs md:text-sm font-bold tracking-widest uppercase bg-black/30 px-4 py-2 rounded-full backdrop-blur-md">Pratinjau Gambar Soal</div>
+                        <button onClick={() => { setShowLightbox(false); setZoomLevel(1); }} className="bg-white/10 hover:bg-rose-500 text-white rounded-full p-2.5 md:p-3 transition-colors shadow-lg"><svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"></path></svg></button>
                     </div>
-
-                    {/* Image Viewer dengan Zoom */}
                     <div className="w-full h-full overflow-auto flex items-center justify-center p-4">
-                        <img
-                            src={soalSekarang.gambar}
-                            alt="Ilustrasi Zoom"
-                            style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'center center' }}
-                            className="max-w-full max-h-full md:max-w-[80vw] md:max-h-[80vh] object-contain transition-transform duration-300 ease-out rounded-lg shadow-2xl"
-                        />
+                        <img src={soalSekarang.gambar} alt="Zoom" style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'center center' }} className="max-w-full max-h-full md:max-w-[80vw] md:max-h-[80vh] object-contain transition-transform duration-300 ease-out rounded-lg shadow-2xl" />
                     </div>
-
-                    {/* Floating Zoom Controls */}
                     <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 flex items-center gap-4 bg-slate-800/80 backdrop-blur-md p-2 md:p-2.5 rounded-full border border-slate-600/50 z-50 shadow-2xl">
-                        <button onClick={() => setZoomLevel(p => Math.max(0.5, p - 0.25))} className="p-2 md:p-3 text-white hover:bg-slate-700 rounded-full transition-colors active:scale-95" title="Perkecil">
-                            <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M20 12H4"></path></svg>
-                        </button>
-                        <div className="flex flex-col items-center justify-center w-12 md:w-16">
-                            <span className="text-indigo-400 text-[10px] font-bold uppercase tracking-wider mb-0.5">Zoom</span>
-                            <span className="text-white font-mono font-bold text-sm md:text-base leading-none">{Math.round(zoomLevel * 100)}%</span>
-                        </div>
-                        <button onClick={() => setZoomLevel(p => Math.min(3, p + 0.25))} className="p-2 md:p-3 text-white hover:bg-slate-700 rounded-full transition-colors active:scale-95" title="Perbesar">
-                            <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4"></path></svg>
-                        </button>
+                        <button onClick={() => setZoomLevel(p => Math.max(0.5, p - 0.25))} className="p-2 md:p-3 text-white hover:bg-slate-700 rounded-full transition-colors active:scale-95"><svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M20 12H4"></path></svg></button>
+                        <div className="flex flex-col items-center justify-center w-12 md:w-16"><span className="text-indigo-400 text-[10px] font-bold uppercase tracking-wider mb-0.5">Zoom</span><span className="text-white font-mono font-bold text-sm md:text-base leading-none">{Math.round(zoomLevel * 100)}%</span></div>
+                        <button onClick={() => setZoomLevel(p => Math.min(3, p + 0.25))} className="p-2 md:p-3 text-white hover:bg-slate-700 rounded-full transition-colors active:scale-95"><svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4"></path></svg></button>
                     </div>
                 </div>
             )}

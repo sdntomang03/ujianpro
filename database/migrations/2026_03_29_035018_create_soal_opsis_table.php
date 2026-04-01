@@ -13,9 +13,17 @@ return new class extends Migration
     {
         Schema::create('soal_opsis', function (Blueprint $table) {
             $table->id();
+
             $table->foreignId('soal_id')->constrained('soals')->cascadeOnDelete();
-            $table->text('teks_opsi'); // Isi jawaban: "Jakarta", "Merah Putih", dll
-            $table->string('group')->nullable(); // Untuk Menjodohkan: 'kiri' atau 'kanan'
+
+            $table->text('teks_opsi');
+
+            // Digunakan khusus untuk Menjodohkan (menyimpan nilai "L1", "R1", dll)
+            $table->string('group')->nullable();
+
+            // --- TAMBAHAN BARU: Status Kebenaran Opsi ---
+            $table->boolean('is_correct')->default(false);
+
             $table->timestamps();
         });
     }

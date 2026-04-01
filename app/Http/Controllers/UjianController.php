@@ -27,7 +27,6 @@ class UjianController extends Controller
 
         // 2. Jika belum pernah mulai, BUAT PETA ACAKAN SEKARANG!
         if (! $sesi) {
-            // Ambil semua soal dari ujian ini
             $soals = $ujian->soals()->with('opsis')->get();
 
             // Acak urutan soal jika pengaturan ujian meminta diacak
@@ -51,36 +50,46 @@ class UjianController extends Controller
                 // 1. Opsi yang BOLEH diacak (PG & PG Kompleks)
                 if (in_array($soal->tipe_soal, ['pg', 'pg_kompleks'])) {
                     $opsis = $soal->opsis;
-                    // Acak opsi hanya jika pengaturan ujian mengizinkan
                     if ($ujian->acak_opsi) {
                         $opsis = $opsis->shuffle();
                     }
                     $dataSoal['opsi'] = $opsis->pluck('id')->toArray();
                 }
 
-                // 2. Opsi yang HARUS STATIS / TIDAK BOLEH DIACAK (Survei & Benar-Salah)
+                // 2. Opsi yang HARUS STATIS (Survei & Benar-Salah)
                 elseif (in_array($soal->tipe_soal, ['survei', 'benar_salah'])) {
-                    // Abaikan pengaturan ujian, paksa urutannya sesuai aslinya di database!
                     $dataSoal['opsi'] = $soal->opsis->pluck('id')->toArray();
                 }
 
                 // 3. Opsi Menjodohkan (Acak bagian Kanan saja)
+                // 3. Opsi Menjodohkan (Acak bagian Kanan saja)
                 elseif ($soal->tipe_soal === 'menjodohkan') {
-                    $kiri = $soal->opsis->where('group', 'kiri')->pluck('id')->toArray();
-                    $kanan = $soal->opsis->where('group', 'kanan');
+                    // Filter: Ambil yang group-nya persis 'kiri' ATAU berawalan 'L' (L1, L2, dst)
+                    $kiri = $soal->opsis->filter(function ($o) {
+                        return $o->group === 'kiri' || str_starts_with($o->group, 'L');
+                    })->pluck('id')->toArray();
+
+                    // Filter: Ambil yang group-nya persis 'kanan' ATAU berawalan 'R' (R1, R2, dst)
+                    $kanan = $soal->opsis->filter(function ($o) {
+                        return $o->group === 'kanan' || str_starts_with($o->group, 'R');
+                    });
 
                     if ($ujian->acak_opsi) {
                         $kanan = $kanan->shuffle();
                     }
 
                     $kanan = $kanan->pluck('id')->toArray();
-                    $dataSoal['opsi'] = ['kiri' => $kiri, 'kanan' => $kanan];
+
+                    // Pastikan array di-reindex dengan array_values agar format JSON-nya rapi
+                    $dataSoal['opsi'] = [
+                        'kiri' => array_values($kiri),
+                        'kanan' => array_values($kanan),
+                    ];
                 }
 
                 $petaAcakan[] = $dataSoal;
             }
 
-            // Simpan ke database (Sangat ringan, cuma 1 baris insert!)
             $waktuMulai = now();
             $batasWaktu = $waktuMulai->copy()->addMinutes($ujian->durasi_menit);
 
@@ -94,48 +103,38 @@ class UjianController extends Controller
             ]);
         }
 
-        // Arahkan ke Halaman Pengerjaan
         return redirect()->route('ruang.ujian', ['sesi_id' => $sesi->id]);
     }
 
     // Fungsi untuk menampilkan halaman React beserta Data Aslinya
     public function ruangUjian($sesi_id)
     {
-        // 1. Ambil Sesi Ujian Siswa
         $sesi = PesertaUjian::with('ujian')->findOrFail($sesi_id);
 
-        // 1. CEK STATUS: Jika sudah selesai, JANGAN izinkan masuk ruang ujian lagi!
-        // Langsung lempar kembali ke Dashboard.
         if ($sesi->status === 'selesai') {
             return redirect()->route('dashboard')->with('success', 'Ujian ini sudah Anda selesaikan!');
         }
 
-        // 2. CEK WAKTU: Cek apakah waktu sudah habis di server
         if (now()->greaterThanOrEqualTo($sesi->batas_waktu)) {
-            // Ubah status jadi selesai jika dia memaksa masuk saat waktu sudah habis
             $sesi->update(['status' => 'selesai']);
 
             return redirect()->route('dashboard')->with('error', 'Waktu ujian telah habis.');
         }
 
-        // 2. Ambil Semua Soal asli berdasarkan Peta Acakan
         $soalIds = collect($sesi->peta_acakan)->pluck('soal_id');
         $soals = Soal::with('opsis')->whereIn('id', $soalIds)->get()->keyBy('id');
 
-        // 3. Rakit Data (Terjemahkan ID Opsi menjadi Teks Opsi sesuai Acakan)
         $dataSoalTampil = collect($sesi->peta_acakan)->map(function ($peta) use ($soals) {
             $soalAsli = $soals[$peta['soal_id']];
 
             $opsiTampil = [];
-            // Susun opsi Menjodohkan
+
             if ($peta['tipe'] === 'menjodohkan') {
                 $opsiTampil = [
                     'left' => collect($peta['opsi']['kiri'])->map(fn ($id) => $soalAsli->opsis->firstWhere('id', $id)),
                     'right' => collect($peta['opsi']['kanan'])->map(fn ($id) => $soalAsli->opsis->firstWhere('id', $id)),
                 ];
-            }
-            // Susun opsi untuk PG, Survei, Benar-Salah
-            elseif ($peta['tipe'] !== 'isian') {
+            } elseif ($peta['tipe'] !== 'isian') {
                 $opsiTampil = collect($peta['opsi'])->map(fn ($id) => $soalAsli->opsis->firstWhere('id', $id))->values();
             }
 
@@ -145,11 +144,10 @@ class UjianController extends Controller
                 'tipe' => $soalAsli->tipe_soal,
                 'tanya' => $soalAsli->pertanyaan,
                 'gambar' => $soalAsli->file_gambar,
-                'opsi' => $opsiTampil,
+                'opsi' => $opsiTampil, // ID, Teks Opsi, tapi TIDAK ADA is_correct (aman dari Inspect Element!)
             ];
         });
 
-        // 4. Kirim ke React (Inertia)
         return Inertia::render('RuangUjian', [
             'sesi' => $sesi,
             'dataSoal' => $dataSoalTampil,
@@ -158,24 +156,13 @@ class UjianController extends Controller
 
     public function simpanJawaban(Request $request, $sesi_id)
     {
-        // 1. PASANG CCTV: Catat apa yang dikirim oleh React ke file Log Laravel
-        Log::info('--- MENCOBA MENYIMPAN JAWABAN ---');
-        Log::info('Data dari React: ', $request->all());
+        Log::info('--- MENCOBA MENYIMPAN JAWABAN ---', $request->all());
 
         try {
             $sesi = PesertaUjian::findOrFail($sesi_id);
 
-            // 2. KITA MATIKAN SEMENTARA PENGECEKAN WAKTU! (Hapus komentar // jika ingin diaktifkan lagi nanti)
-            /* if (now()->greaterThanOrEqualTo($sesi->batas_waktu) || $sesi->status === 'selesai') {
-                \Log::warning('Ditolak karena waktu habis / sudah selesai');
-                return back();
-            }
-            */
-
-            // 3. Pastikan format jawaban aman (Array)
             $jawabanAman = is_array($request->jawaban) ? $request->jawaban : [$request->jawaban];
 
-            // 4. Simpan ke Database
             JawabanPeserta::updateOrCreate(
                 [
                     'peserta_ujian_id' => $sesi->id,
@@ -183,91 +170,127 @@ class UjianController extends Controller
                 ],
                 [
                     'jawaban_user' => $jawabanAman,
-                    'is_ragu' => false,
+
+                    // 🔥 BACA STATUS RAGU-RAGU DARI REQUEST REACT
+                    'is_ragu' => $request->boolean('is_ragu'),
                 ]
             );
-
-            Log::info('BERHASIL DISIMPAN KE MYSQL!');
 
             return back();
 
         } catch (\Exception $e) {
-            // 5. JIKA ERROR DATABASE MUNCUL, CATAT DETAILNYA!
             Log::error('GAGAL MENYIMPAN DATABASE: '.$e->getMessage());
 
             return back()->withErrors(['pesan' => $e->getMessage()]);
         }
     }
 
-    // --- FUNGSI MENGAKHIRI UJIAN & AUTO-SCORING ---
+    // --- FUNGSI MENGAKHIRI UJIAN & AUTO-SCORING (UPDATED: BASED ON `is_correct` AND RELATIONS) ---
     public function selesaiUjian($sesi_id)
     {
-        // 1. Ambil Data Sesi beserta Jawaban dan Opsi Soalnya
         $sesi = PesertaUjian::with(['jawabanPesertas.soal.opsis'])->findOrFail($sesi_id);
 
         if ($sesi->status !== 'selesai') {
             $totalSkor = 0;
             $totalBobot = 0;
 
-            // 2. Looping (Periksa) Setiap Jawaban Siswa
             foreach ($sesi->jawabanPesertas as $jawaban) {
                 $soal = $jawaban->soal;
-                if (! $soal) {
+                if (! $soal || $soal->tipe_soal === 'survei') {
                     continue;
-                }
+                } // Lewati jika tidak ada soal / tipe survei
 
-                if ($soal->tipe_soal === 'survei') {
-                    continue;
-                } // Survei tidak dinilai!
-
-                $kunci = $soal->kunci_jawaban ?? [];
                 $userAns = $jawaban->jawaban_user ?? [];
-                $opsis = $soal->opsis->keyBy('id'); // Mapping ID ke Teks Opsi
+                $opsis = $soal->opsis->keyBy('id'); // Map semua opsi berdasarkan ID-nya
 
                 $totalBobot += $soal->bobot_nilai;
                 $skorSoal = 0;
 
-                // --- 🧠 ALGORITMA SMART SCORING ---
+                // =========================================================
+                // 🧠 ALGORITMA PENILAIAN BERBASIS ID DAN BOOLEAN
+                // =========================================================
 
+                // A. PILIHAN GANDA (Cek apakah ID opsi yang dipilih is_correct == true)
                 if ($soal->tipe_soal === 'pg') {
-                    // A. PILIHAN GANDA (Terjemahkan ID yang dikirim React menjadi Teks, lalu cocokkan)
                     $idDipilih = $userAns[0] ?? null;
                     if ($idDipilih && isset($opsis[$idDipilih])) {
-                        if (in_array($opsis[$idDipilih]->teks_opsi, $kunci)) {
+                        if ($opsis[$idDipilih]->is_correct) {
                             $skorSoal = $soal->bobot_nilai;
                         }
                     }
-                } elseif ($soal->tipe_soal === 'isian') {
-                    // B. ISIAN SINGKAT (Anti Huruf Besar/Kecil & Anti Spasi Berlebih)
+                }
+
+                // B. ISIAN SINGKAT (Cek ke database teks opsi apa saja yang is_correct)
+                elseif ($soal->tipe_soal === 'isian') {
                     $jawabanTeks = strtolower(trim($userAns[0] ?? ''));
-                    $kunciLower = array_map(fn ($k) => strtolower(trim($k)), $kunci);
+
+                    // Ambil semua kemungkinan jawaban benar dari database (ubah jadi huruf kecil)
+                    $kunciLower = $soal->opsis
+                        ->where('is_correct', true)
+                        ->pluck('teks_opsi')
+                        ->map(fn ($t) => strtolower(trim($t)))
+                        ->toArray();
 
                     if (in_array($jawabanTeks, $kunciLower)) {
                         $skorSoal = $soal->bobot_nilai;
                     }
-                } elseif ($soal->tipe_soal === 'pg_kompleks') {
-                    // C. PG KOMPLEKS (Sistem Poin Parsial & Penalti)
-                    $teksDipilih = [];
-                    foreach ($userAns as $id) {
-                        if (isset($opsis[$id])) {
-                            $teksDipilih[] = $opsis[$id]->teks_opsi;
-                        }
-                    }
+                }
 
-                    $jmlBenar = count(array_intersect($teksDipilih, $kunci));
-                    $jmlSalah = count(array_diff($teksDipilih, $kunci)); // Penalti salah pilih
-                    $totalKunci = count($kunci);
+                // C. PG KOMPLEKS (Hitung Rasio Jawaban Benar Berbasis ID)
+                elseif ($soal->tipe_soal === 'pg_kompleks') {
+                    $kunciBenarIds = $soal->opsis->where('is_correct', true)->pluck('id')->toArray();
+                    $totalKunci = count($kunciBenarIds);
 
                     if ($totalKunci > 0) {
-                        // Rumus: (Benar - Salah) / Total Kunci * Bobot
+                        $jmlBenar = 0;
+                        $jmlSalah = 0;
+
+                        // Periksa setiap ID yang dipilih siswa
+                        foreach ($userAns as $idDipilih) {
+                            if (in_array($idDipilih, $kunciBenarIds)) {
+                                $jmlBenar++;
+                            } else {
+                                $jmlSalah++; // Kena penalti karena asal milih
+                            }
+                        }
+
                         $rasio = ($jmlBenar - $jmlSalah) / $totalKunci;
-                        $skorSoal = max(0, $rasio * $soal->bobot_nilai); // Skor tidak boleh minus
+                        $skorSoal = max(0, $rasio * $soal->bobot_nilai);
                     }
-                } else {
-                    // D. TIPE LAIN (Menjodohkan / Benar-Salah)
-                    // Untuk sementara, jika diisi kita berikan nilai penuh agar simpel.
-                    // (Logika pencocokan kompleks bisa dikembangkan lebih lanjut di sini)
-                    $skorSoal = count($userAns) > 0 ? $soal->bobot_nilai : 0;
+                }
+
+                // D. BENAR / SALAH (Format: { "opsi_id": "Benar", "opsi_id2": "Salah" })
+                elseif ($soal->tipe_soal === 'benar_salah') {
+                    $semuaPernyataan = $soal->opsis; // Semua baris pernyataan di tabel
+                    $poinPerItem = $soal->bobot_nilai / $semuaPernyataan->count();
+
+                    foreach ($semuaPernyataan as $pernyataan) {
+                        // Terjemahkan is_correct boolean ke string "Benar" / "Salah"
+                        $kunciString = $pernyataan->is_correct ? 'Benar' : 'Salah';
+
+                        // Cek apakah jawaban siswa pada pernyataan ID ini SAMA dengan kuncinya
+                        if (isset($userAns[$pernyataan->id]) && $userAns[$pernyataan->id] === $kunciString) {
+                            $skorSoal += $poinPerItem;
+                        }
+                    }
+                }
+
+                // E. MENJODOHKAN (Format: { "id_kiri": "id_kanan" })
+                elseif ($soal->tipe_soal === 'menjodohkan') {
+                    // Kunci jawaban menjodohkan tersimpan dalam bentuk JSON string di tabel soals
+                    $kunciMap = json_decode($soal->kunci_jawaban, true) ?? [];
+                    $totalPasangan = count($kunciMap);
+
+                    if ($totalPasangan > 0) {
+                        $poinPerPasangan = $soal->bobot_nilai / $totalPasangan;
+
+                        foreach ($userAns as $idKiri => $idKananDipilih) {
+                            // Jika pemetaan ID Kiri => ID Kanan dari siswa sama persis dengan kunci di JSON
+                            if (isset($kunciMap[$idKiri]) && $kunciMap[$idKiri] == $idKananDipilih) {
+                                $skorSoal += $poinPerPasangan;
+                            }
+                        }
+                    }
                 }
 
                 // 3. Simpan Nilai per Soal ke Database
@@ -286,14 +309,11 @@ class UjianController extends Controller
             ]);
         }
 
-        // 6. Lempar Siswa ke Dashboard dengan membawa Pesan Nilai
         return redirect('/dashboard')->with('success', '🎉 Ujian Selesai! Nilai Anda: '.round($sesi->nilai_akhir, 2));
     }
 
     public function index()
     {
-        // Ambil semua kategori ujian BESERTA data ujian di dalamnya
-        // (Bisa ditambahkan kondisi where() jika ingin menampilkan ujian yang aktif saja)
         $kategoriUjians = KategoriUjian::with('ujians')->get();
 
         return Inertia::render('Siswa/DaftarUjian', [
@@ -303,7 +323,6 @@ class UjianController extends Controller
 
     public function persiapan($id)
     {
-        // Mengambil data ujian dan menghitung jumlah soal yang terkait
         $ujian = Ujian::with('kategoriUjian')->withCount('soals')->findOrFail($id);
 
         return Inertia::render('Siswa/PersiapanUjian', [
