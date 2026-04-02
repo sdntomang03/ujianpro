@@ -314,10 +314,25 @@ class UjianController extends Controller
 
     public function index()
     {
-        $kategoriUjians = KategoriUjian::with('ujians')->get();
+        // 1. Ambil data user yang sedang login beserta paket langganannya
+        $user = Auth::user()->load('paket');
 
+        // 2. Ambil Kategori beserta Ujian yang JENJANG-nya sesuai dengan siswa
+        $kategoriUjians = KategoriUjian::with(['ujians' => function ($query) use ($user) {
+            // Filter ujian di dalam kategori ini agar sesuai jenjang siswa
+            $query->where('jenjang', $user->jenjang)
+                ->with('minimalPaket'); // Tarik juga info minimal paket untuk kunci UI
+        }])
+        // Opsional: Sembunyikan kategori jika sama sekali tidak ada ujian untuk jenjang siswa tersebut
+            ->whereHas('ujians', function ($query) use ($user) {
+                $query->where('jenjang', $user->jenjang);
+            })
+            ->get();
+
+        // 3. Kirim ke React
         return Inertia::render('Siswa/DaftarUjian', [
             'kategoriUjians' => $kategoriUjians,
+            'userPaket' => $user->paket, // Kirim kekuatan paket user (misal: 10, 20, 30)
         ]);
     }
 

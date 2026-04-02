@@ -30,11 +30,10 @@ class RoleSeeder extends Seeder
         }
 
         // JIKA KAMU INGIN SEMUA USER YANG BUKAN ADMIN JADI SISWA:
-        /*
-        User::where('email', '!=', 'admin@example.com')->get()->each(function($user) use ($siswaRole) {
+
+        User::where('email', '!=', 'admin@cbtpro.com')->get()->each(function ($user) use ($siswaRole) {
             $user->assignRole($siswaRole);
         });
-        */
 
         $this->command->info('Roles have been assigned to existing users!');
     }

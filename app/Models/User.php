@@ -11,7 +11,8 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Spatie\Permission\Traits\HasRoles;
 
-#[Fillable(['name', 'email', 'password'])]
+// 🌟 TAMBAHKAN 'paket_id' DAN 'jenjang' DI SINI
+#[Fillable(['name', 'email', 'password', 'paket_id', 'jenjang'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -29,5 +30,10 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    public function paket()
+    {
+        return $this->belongsTo(Paket::class, 'paket_id');
     }
 }

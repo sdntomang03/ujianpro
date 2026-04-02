@@ -2,9 +2,12 @@
 
 use App\Http\Controllers\Admin\BankSoalController;
 use App\Http\Controllers\Admin\LaporanController;
-use App\Http\Controllers\Admin\SiswaController;
+use App\Http\Controllers\Admin\SiswaController as AdminSiswaController;
+use App\Http\Controllers\Admin\TransaksiController;
 use App\Http\Controllers\Admin\UjianController as AdminUjianController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\Siswa\LanggananController;
+use App\Http\Controllers\SiswaController;
 use App\Http\Controllers\UjianController;
 use App\Models\PesertaUjian;
 use App\Models\Soal;
@@ -24,9 +27,10 @@ Route::get('/', function () {
     ]);
 });
 
-// 2. Group Rute Terautentikasi (Sudah Login)
-Route::middleware(['auth', 'verified'])->group(function () {
+// 🌟 2. Group Rute Terautentikasi (TAMBAHKAN auth.session DI SINI)
+Route::middleware(['auth', 'verified', 'auth.session'])->group(function () {
 
+    // --- AREA ADMIN ---
     Route::get('/admin/dashboard', function () {
         // 1. Hitung Metrik Utama
         $totalSiswa = User::role('siswa')->count();
@@ -84,16 +88,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
             'daftarUjianAktif' => $daftarUjianAktif,
             'hasilTerbaru' => $hasilTerbaru,
         ]);
-    })->middleware(['auth', 'role:admin'])->name('admin.dashboard');
+    })->middleware(['role:admin'])->name('admin.dashboard');
 
-    Route::middleware(['auth', 'role:admin'])->prefix('admin')->group(function () {
+    // Group khusus Role Admin
+    Route::middleware(['role:admin'])->prefix('admin')->group(function () {
         // CRUD Siswa
-        Route::resource('siswa', SiswaController::class)
-            ->names('admin.siswa');
+        Route::resource('siswa', AdminSiswaController::class)->names('admin.siswa');
 
         // CRUD Bank Soal
-        Route::resource('bank-soal', BankSoalController::class)
-            ->names('admin.bank-soal');
+        Route::resource('bank-soal', BankSoalController::class)->names('admin.bank-soal');
         Route::post('bank-soal/upload-editor-image', [BankSoalController::class, 'uploadImageEditor'])->name('admin.bank-soal.upload-editor-image');
 
         // Laporan Nilai
@@ -101,80 +104,38 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('laporan-nilai/export', [LaporanController::class, 'export'])->name('admin.laporan.export');
         Route::get('laporan-nilai/{id}', [LaporanController::class, 'show'])->name('admin.laporan.show');
 
-        // CRUD Ujian Dasar (Gunakan alias AdminUjianController & tambahkan names)
-        Route::resource('ujian', AdminUjianController::class)
-            ->names('admin.ujian');
+        // CRUD Ujian Dasar
+        Route::resource('ujian', AdminUjianController::class)->names('admin.ujian');
 
         // Route Khusus Manajemen Soal di dalam Ujian
         Route::post('/ujian/{ujian}/import-soal', [AdminUjianController::class, 'importSoal'])->name('admin.ujian.import-soal');
         Route::delete('/ujian/{ujian}/remove-soal/{soal}', [AdminUjianController::class, 'removeSoal'])->name('admin.ujian.remove-soal');
+
+        // Transaksi (Pindah ke dalam blok admin ini agar lebih rapi)
+        Route::get('/transaksi', [TransaksiController::class, 'index'])->name('admin.transaksi.index');
+        Route::post('/transaksi/{id}/approve', [TransaksiController::class, 'approve'])->name('admin.transaksi.approve');
+        Route::post('/transaksi/{id}/reject', [TransaksiController::class, 'reject'])->name('admin.transaksi.reject');
     });
 
     // --- AREA KHUSUS SISWA (Spatie Role) ---
     Route::middleware(['role:siswa'])->group(function () {
+        // Dashboard Siswa
+        Route::get('/dashboard', [SiswaController::class, 'index'])->name('dashboard');
 
-        // Dashboard Siswa dengan Logika Statistik
-        Route::get('/dashboard', function () {
-            $user = auth()->user();
-
-            // 1. Ambil Riwayat Ujian Siswa (Selesai)
-            $riwayatRaw = PesertaUjian::with('ujian')
-                ->where('user_id', $user->id)
-                ->where('status', 'selesai')
-                ->orderBy('updated_at', 'desc')
-                ->get();
-
-            $riwayat = $riwayatRaw->map(fn ($sesi) => [
-                'id' => $sesi->id,
-                'judul' => $sesi->ujian->judul_ujian ?? 'Ujian Dihapus',
-                'tanggal' => $sesi->updated_at->format('d M Y'),
-                'nilai' => (float) $sesi->nilai_akhir,
-                'status' => $sesi->nilai_akhir >= 70 ? 'Lulus' : 'Remedial',
-            ]);
-
-            // 2. Hitung Statistik
-            $totalSelesai = $riwayat->count();
-            $rataRata = $totalSelesai > 0 ? $riwayat->avg('nilai') : 0;
-            $lulus = $riwayat->where('status', 'Lulus')->count();
-
-            $statistik = [
-                ['title' => 'Ujian Diselesaikan', 'value' => $totalSelesai, 'icon' => '📝', 'color' => 'text-indigo-600', 'bg' => 'bg-indigo-50'],
-                ['title' => 'Nilai Rata-rata', 'value' => round($rataRata, 1), 'icon' => '🎯', 'color' => 'text-emerald-600', 'bg' => 'bg-emerald-50'],
-                ['title' => 'Lulus Ujian', 'value' => $lulus, 'icon' => '🏆', 'color' => 'text-amber-600', 'bg' => 'bg-amber-50'],
-            ];
-
-            // 3. Filter Ujian Tersedia (Belum dikerjakan)
-            $idUjianSelesai = $riwayatRaw->pluck('ujian_id')->toArray();
-            $ujianTersedia = Ujian::withCount('soals')
-                ->whereNotIn('id', $idUjianSelesai)
-                ->orderBy('created_at', 'desc')
-                ->get()
-                ->map(fn ($u) => [
-                    'id' => $u->id,
-                    'judul' => $u->judul_ujian,
-                    'mapel' => 'Ujian Utama',
-                    'durasi' => $u->durasi_menit.' Menit',
-                    'soal' => $u->soals_count,
-                    'status' => 'Tersedia',
-                ]);
-
-            return Inertia::render('Dashboard', [
-                'statistik' => $statistik,
-                'ujianTersedia' => $ujianTersedia,
-                'riwayatUjian' => $riwayat,
-            ]);
-        })->name('dashboard');
-
-        // Fitur Utama Ujian (Sudah menggunakan POST untuk mulai)
+        // Fitur Utama Ujian
         Route::get('/daftar-ujian', [UjianController::class, 'index'])->name('ujian.index');
         Route::get('/ujian/{id}/persiapan', [UjianController::class, 'persiapan'])->name('ujian.persiapan');
         Route::post('/ujian/{id}/mulai', [UjianController::class, 'mulaiUjian'])->name('ujian.mulai');
         Route::get('/ruang-ujian/{sesi_id}', [UjianController::class, 'ruangUjian'])->name('ruang.ujian');
         Route::post('/ujian/{sesi_id}/simpan-jawaban', [UjianController::class, 'simpanJawaban'])->name('ujian.simpan_jawaban');
         Route::post('/ujian/{sesi_id}/selesai', [UjianController::class, 'selesaiUjian'])->name('ujian.selesai');
+
+        // Upgrade Paket (Pindah ke dalam blok siswa ini)
+        Route::get('/upgrade', [LanggananController::class, 'index'])->name('upgrade.plan');
+        Route::post('/upgrade/proses', [LanggananController::class, 'prosesUpgrade'])->name('upgrade.process');
     });
 
-    // Rute Profile (Admin & Siswa bisa akses)
+    // --- Rute Bebas (Admin & Siswa bisa akses) ---
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');

@@ -41,4 +41,9 @@ class Ujian extends Model
         // Pastikan nama modelnya adalah PesertaUjian
         return $this->hasMany(PesertaUjian::class, 'ujian_id');
     }
+
+    public function minimalPaket()
+    {
+        return $this->belongsTo(Paket::class, 'minimal_paket_id');
+    }
 }

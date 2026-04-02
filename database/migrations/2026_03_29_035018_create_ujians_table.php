@@ -24,6 +24,8 @@ return new class extends Migration
             $table->dateTime('waktu_selesai')->nullable();
             $table->boolean('acak_soal')->default(true);
             $table->boolean('acak_opsi')->default(true);
+            $table->enum('jenjang', ['SD', 'SMP', 'SMA', 'UMUM'])->default('UMUM');
+            $table->foreignId('minimal_paket_id')->nullable()->constrained('pakets')->nullOnDelete();
             $table->timestamps();
         });
     }

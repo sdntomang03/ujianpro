@@ -29,19 +29,24 @@ class AuthenticatedSessionController extends Controller
      */
     public function store(LoginRequest $request): RedirectResponse
     {
+        // 1. Cek email dan password
         $request->authenticate();
 
+        // 2. Buat sesi baru
         $request->session()->regenerate();
 
-        $user = auth()->user();
+        // 🌟 3. KUNCI UTAMANYA DI SINI!
+        // Baris ini akan menghancurkan (menendang) semua sesi lain milik user ini
+        // dari browser/perangkat manapun yang sedang aktif.
+        Auth::logoutOtherDevices($request->password);
 
-        // Cek Role menggunakan Spatie
-        if ($user->hasRole('admin')) {
-            return redirect()->route('admin.dashboard');
+        // Jika user adalah admin, arahkan ke admin.dashboard
+        if ($request->user()->hasRole('admin')) {
+            return redirect()->intended(route('admin.dashboard'));
         }
 
-        // Default untuk siswa atau role lainnya
-        return redirect()->route('dashboard');
+        // Jika user adalah siswa, arahkan ke dashboard siswa
+        return redirect()->intended(route('dashboard', absolute: false));
     }
 
     /**

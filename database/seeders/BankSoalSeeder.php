@@ -31,6 +31,10 @@ class BankSoalSeeder extends Seeder
             'durasi_menit' => 90,
             'acak_soal' => true,
             'acak_opsi' => true,
+
+            // 🌟 SESUAIKAN DENGAN ARSITEKTUR AKSES BARU
+            'jenjang' => 'SMA',
+            'minimal_paket_id' => 2, // 2 = Premium (Berdasarkan PaketSeeder)
         ]);
 
         // 3. INPUT 6 TIPE SOAL (Menggunakan Arsitektur `is_correct`)
