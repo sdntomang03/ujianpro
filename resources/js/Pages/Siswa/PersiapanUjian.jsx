@@ -91,8 +91,8 @@ export default function PersiapanUjian({ auth, ujian }) {
                                         />
                                     </td>
                                     <td className="pl-2">
-                                        <div className="font-weight-bold" style={{ fontSize: '18px', lineHeight: '1.2' }}>PUSMENDIK</div>
-                                        <div><small>APLIKASI ANBK (CBT PRO)</small></div>
+                                        <div className="font-weight-bold" style={{ fontSize: '18px', lineHeight: '1.2' }}>CBT PRO</div>
+                                        <div><small>APLIKASI UJIAN</small></div>
                                     </td>
                                 </tr>
                             </tbody>

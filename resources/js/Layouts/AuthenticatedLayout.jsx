@@ -79,8 +79,16 @@ export default function AuthenticatedLayout({ header, children }) {
                                         <NavLink href={route('admin.siswa.index')} active={route().current('admin.siswa.*')}>
     Data Siswa
 </NavLink>
-                                        <NavLink href="#" active={false}>Bank Soal</NavLink>
-                                        <NavLink href="#" active={false}>Laporan Nilai</NavLink>
+
+                                        <NavLink href={route('admin.bank-soal.index')} active={route().current('admin.bank-soal.*')}>
+                                            Bank Soal
+                                        </NavLink>
+                                        <NavLink href={route('admin.ujian.index')} active={route().current('admin.ujian.*')}>
+                                            Ujian
+                                        </NavLink>
+                                        <NavLink href={route('admin.laporan.index')} active={route().current('admin.laporan.*')}>Laporan Nilai</NavLink>
+
+
                                     </>
                                 ) : (
                                     <NavLink href={route('ujian.index')} active={route().current('ujian.*')}>

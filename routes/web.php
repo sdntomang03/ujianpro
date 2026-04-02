@@ -1,7 +1,9 @@
 <?php
 
 use App\Http\Controllers\Admin\BankSoalController;
+use App\Http\Controllers\Admin\LaporanController;
 use App\Http\Controllers\Admin\SiswaController;
+use App\Http\Controllers\Admin\UjianController as AdminUjianController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\UjianController;
 use App\Models\PesertaUjian;
@@ -88,9 +90,24 @@ Route::middleware(['auth', 'verified'])->group(function () {
         // CRUD Siswa
         Route::resource('siswa', SiswaController::class)
             ->names('admin.siswa');
+
         // CRUD Bank Soal
         Route::resource('bank-soal', BankSoalController::class)
             ->names('admin.bank-soal');
+        Route::post('bank-soal/upload-editor-image', [BankSoalController::class, 'uploadImageEditor'])->name('admin.bank-soal.upload-editor-image');
+
+        // Laporan Nilai
+        Route::get('laporan-nilai', [LaporanController::class, 'index'])->name('admin.laporan.index');
+        Route::get('laporan-nilai/export', [LaporanController::class, 'export'])->name('admin.laporan.export');
+        Route::get('laporan-nilai/{id}', [LaporanController::class, 'show'])->name('admin.laporan.show');
+
+        // CRUD Ujian Dasar (Gunakan alias AdminUjianController & tambahkan names)
+        Route::resource('ujian', AdminUjianController::class)
+            ->names('admin.ujian');
+
+        // Route Khusus Manajemen Soal di dalam Ujian
+        Route::post('/ujian/{ujian}/import-soal', [AdminUjianController::class, 'importSoal'])->name('admin.ujian.import-soal');
+        Route::delete('/ujian/{ujian}/remove-soal/{soal}', [AdminUjianController::class, 'removeSoal'])->name('admin.ujian.remove-soal');
     });
 
     // --- AREA KHUSUS SISWA (Spatie Role) ---

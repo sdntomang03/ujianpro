@@ -1,15 +1,23 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link, useForm } from '@inertiajs/react';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
+import axios from 'axios';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 
 export default function Edit({ auth, soal, kategori }) {
     const fileInputRef = useRef(null);
+    const quillRef = useRef(null); // <-- Referensi baru untuk ReactQuill
+
+    // Fungsi pintar untuk mendeteksi asal gambar (Lokal vs Internet/Seeder)
+    const getImageUrl = (path) => {
+        if (!path) return null;
+        return (path.startsWith('http://') || path.startsWith('https://')) ? path : `/storage/${path}`;
+    };
 
     // Load gambar awal dari database jika ada
     const [imagePreview, setImagePreview] = useState(
-        soal.file_gambar ? `/storage/${soal.file_gambar}` : null
+        getImageUrl(soal.file_gambar)
     );
 
     // --- LOGIKA PARSING DATA DARI DATABASE KE STATE REACT ---
@@ -75,12 +83,12 @@ export default function Edit({ auth, soal, kategori }) {
         pertanyaan: soal.pertanyaan || '',
         gambar: null, // Hanya diisi jika admin mengganti gambar baru
         bobot_nilai: soal.bobot_nilai || 10,
+        hapus_gambar: false, // Menandai jika gambar dihapus
         ...initialParsedState
     });
 
     // Reset layout jawaban ketika tipe soal DIBERUBAH SAAT MENGEDIT
     useEffect(() => {
-        // Jangan mereset jika ini adalah pertama kali komponen dirender (karena data baru saja diload dari DB)
         if (data.tipe_soal === soal.tipe_soal) return;
 
         switch(data.tipe_soal) {
@@ -100,29 +108,79 @@ export default function Edit({ auth, soal, kategori }) {
     };
 
     const removeImage = () => {
-        setData('gambar', null);
+        setData(values => ({ ...values, gambar: null, hapus_gambar: true }));
         setImagePreview(null);
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
     const submit = (e) => {
         e.preventDefault();
-        // Menggunakan POST tapi karena ada _method: 'PUT', Laravel akan membacanya sebagai Update
         post(route('admin.bank-soal.update', soal.id));
     };
 
-    // Konfigurasi Toolbar Text Editor
-    const quillModules = {
-        toolbar: [
-            [{ 'header': [1, 2, 3, false] }],
-            ['bold', 'italic', 'underline', 'strike'],
-            [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-            ['link', 'image', 'formula'],
-            ['clean']
-        ],
+    // --- FUNGSI PEMBAJAK UPLOAD GAMBAR REACT QUILL ---
+    const imageHandler = () => {
+        const input = document.createElement('input');
+        input.setAttribute('type', 'file');
+        input.setAttribute('accept', 'image/png, image/jpeg, image/jpg, image/webp');
+        input.click();
+
+        input.onchange = async () => {
+            const file = input.files[0];
+            const formData = new FormData();
+            formData.append('image', file);
+
+            try {
+                // Tampilkan loading sementara di editor
+                const quill = quillRef.current.getEditor();
+                const range = quill.getSelection(true);
+                quill.insertText(range.index, 'Mengupload gambar...', 'italic', true);
+
+                // Kirim gambar ke API Laravel untuk dikonversi ke WebP
+                const response = await axios.post(route('admin.bank-soal.upload-editor-image'), formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
+
+                // Hapus teks loading ("Mengupload gambar..." = 20 karakter)
+                quill.deleteText(range.index, 20);
+
+                // Masukkan URL gambar WebP ke dalam editor
+                const url = response.data.url;
+                quill.insertEmbed(range.index, 'image', url);
+
+                // Pindahkan kursor ke setelah gambar
+                quill.setSelection(range.index + 1);
+
+            } catch (error) {
+                console.error('Upload gagal', error);
+                alert('Terjadi kesalahan saat mengupload gambar ke editor.');
+
+                // Hapus teks loading jika gagal
+                const quill = quillRef.current.getEditor();
+                const range = quill.getSelection(true);
+                quill.deleteText(range.index - 20, 20);
+            }
+        };
     };
 
-    // --- ENGINE JAWABAN (PERSIS SEPERTI CREATE.JSX) ---
+    // Toolbar kustom untuk Quill (Gunakan useMemo agar tidak re-render & hilang fokus)
+    const quillModules = useMemo(() => ({
+        toolbar: {
+            container: [
+                [{ 'header': [1, 2, 3, false] }],
+                ['bold', 'italic', 'underline', 'strike'],
+                [{ 'align': [] }],
+                [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+                ['link', 'image', 'formula'],
+                ['clean']
+            ],
+            handlers: {
+                image: imageHandler // Pasang fungsi custom kita di sini
+            }
+        }
+    }), []);
+
+    // --- ENGINE JAWABAN ---
     const renderAnswerEngine = () => {
         if (data.tipe_soal === 'pg' || data.tipe_soal === 'pg_kompleks' || data.tipe_soal === 'survei') {
              return (
@@ -240,7 +298,7 @@ export default function Edit({ auth, soal, kategori }) {
             <form onSubmit={submit} className="max-w-6xl mx-auto mt-6 grid grid-cols-1 lg:grid-cols-3 gap-8 pb-20">
                 <div className="lg:col-span-2 space-y-6">
 
-                    {/* SECTION 1: PERTANYAAN */}
+                    {/* SECTION 1: PERTANYAAN (TAMPIL UNTUK SEMUA TIPE) */}
                     <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
                         <div className="bg-slate-50/80 px-6 py-4 border-b border-slate-100 flex items-center gap-3">
                             <span className="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-bold">1</span>
@@ -250,7 +308,14 @@ export default function Edit({ auth, soal, kategori }) {
                         </div>
                         <div className="p-6">
                             <div className="quill-editor mb-6">
-                                <ReactQuill theme="snow" value={data.pertanyaan} onChange={c => setData('pertanyaan', c)} modules={quillModules} placeholder="Ketikkan wacana, cerita, atau teks pertanyaan utama di sini..." />
+                                <ReactQuill
+                                    ref={quillRef} // <-- PENTING: Pasang ref di sini
+                                    theme="snow"
+                                    value={data.pertanyaan}
+                                    onChange={c => setData('pertanyaan', c)}
+                                    modules={quillModules}
+                                    placeholder="Ketikkan wacana, cerita, atau teks pertanyaan utama di sini..."
+                                />
                                 {errors.pertanyaan && <p className="text-rose-500 text-xs mt-2">{errors.pertanyaan}</p>}
                             </div>
                             <div>
@@ -267,8 +332,6 @@ export default function Edit({ auth, soal, kategori }) {
                                     </div>
                                 )}
                                 <input type="file" ref={fileInputRef} onChange={handleImageChange} className="hidden" accept="image/png, image/jpeg, image/jpg" />
-                                {/* Tambahkan ini untuk berjaga-jaga mengirim null ke backend jika foto dihapus */}
-                                {(!imagePreview && soal.file_gambar) && <input type="hidden" name="hapus_gambar" value="1" />}
                             </div>
                         </div>
                     </div>

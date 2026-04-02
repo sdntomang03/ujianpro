@@ -324,9 +324,23 @@ class UjianController extends Controller
     public function persiapan($id)
     {
         $ujian = Ujian::with('kategoriUjian')->withCount('soals')->findOrFail($id);
+        $user = Auth::user();
 
+        // 1. Cek apakah siswa sudah memiliki sesi pengerjaan untuk ujian ini
+        $sesi = PesertaUjian::where('user_id', $user->id)
+            ->where('ujian_id', $ujian->id)
+            ->first();
+
+        // 2. Jika ujian sudah selesai, lempar kembali ke halaman daftar ujian / dashboard
+        if ($sesi && $sesi->status === 'selesai') {
+            return redirect()->route('dashboard') // Sesuaikan nama route dengan halaman awal siswa Anda
+                ->with('error', 'Anda sudah menyelesaikan ujian ini dan tidak dapat mengulangnya.');
+        }
+
+        // 3. Jika belum selesai (atau belum mulai sama sekali), tampilkan halaman persiapan
         return Inertia::render('Siswa/PersiapanUjian', [
             'ujian' => $ujian,
+            'sesi' => $sesi, // Kirim data sesi agar frontend tahu statusnya
         ]);
     }
 }

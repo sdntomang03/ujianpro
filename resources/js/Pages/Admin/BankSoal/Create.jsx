@@ -1,11 +1,13 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link, useForm } from '@inertiajs/react';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
+import axios from 'axios';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 
-export default function Create({ auth, kategori }) {
+export default function Create({ auth, kategori, ujian_id }) {
     const fileInputRef = useRef(null);
+    const quillRef = useRef(null);
     const [imagePreview, setImagePreview] = useState(null);
 
     const { data, setData, post, processing, errors } = useForm({
@@ -16,13 +18,14 @@ export default function Create({ auth, kategori }) {
         bobot_nilai: 10,
 
         opsi: ['', '', '', ''],
+        ujian_id: ujian_id || '',
         kunci_jawaban: 0, // Untuk PG
         kunci_kompleks: [], // Untuk PG Kompleks (array of index)
         kunci_isian: '', // Untuk Isian Singkat
         pasangan: [{ kiri: '', kanan: '' }, { kiri: '', kanan: '' }],
         pernyataan_bs: [
-            { teks: 'Pernyataan 1', kunci: 'Benar' },
-            { teks: 'Pernyataan 2', kunci: 'Salah' }
+            { teks: '', kunci: 'Benar' },
+            { teks: '', kunci: 'Salah' }
         ]
     });
 
@@ -30,13 +33,27 @@ export default function Create({ auth, kategori }) {
         // Reset state parsial jika tipe berubah agar UI bersih (TAPI tidak mereset 'pertanyaan' utama)
         switch(data.tipe_soal) {
             case 'pg':
-                setData('kunci_jawaban', 0); break;
+                setData('kunci_jawaban', 0);
+                break;
             case 'pg_kompleks':
-                setData('kunci_kompleks', []); break;
+                setData('kunci_kompleks', []);
+                break;
             case 'benar_salah':
-                setData('pernyataan_bs', [{ teks: '', kunci: 'Benar' }, { teks: '', kunci: 'Salah' }]); break;
+                setData('pernyataan_bs', [{ teks: '', kunci: 'Benar' }, { teks: '', kunci: 'Salah' }]);
+                break;
             case 'isian':
-                setData('kunci_isian', ''); break;
+                setData('kunci_isian', '');
+                break;
+            case 'survei':
+                // 🌟 AUTO-FILL OPSI DEFAULT UNTUK SURVEI
+                setData('opsi', [
+                    'Sangat Tidak Setuju',
+                    'Tidak Setuju',
+                    'Ragu-ragu',
+                    'Setuju',
+                    'Sangat Setuju'
+                ]);
+                break;
         }
     }, [data.tipe_soal]);
 
@@ -53,16 +70,67 @@ export default function Create({ auth, kategori }) {
         post(route('admin.bank-soal.store'));
     };
 
-    // Toolbar kustom untuk Quill (opsional tapi bagus)
-    const quillModules = {
-        toolbar: [
-            [{ 'header': [1, 2, 3, false] }],
-            ['bold', 'italic', 'underline', 'strike'],
-            [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-            ['link', 'image', 'formula'],
-            ['clean']
-        ],
+    // --- FUNGSI PEMBAJAK UPLOAD GAMBAR REACT QUILL ---
+    const imageHandler = () => {
+        const input = document.createElement('input');
+        input.setAttribute('type', 'file');
+        input.setAttribute('accept', 'image/png, image/jpeg, image/jpg, image/webp');
+        input.click();
+
+        input.onchange = async () => {
+            const file = input.files[0];
+            const formData = new FormData();
+            formData.append('image', file);
+
+            try {
+                // Tampilkan loading sementara di editor
+                const quill = quillRef.current.getEditor();
+                const range = quill.getSelection(true);
+                quill.insertText(range.index, 'Mengupload gambar...', 'italic', true);
+
+                // Kirim gambar ke API Laravel untuk dikonversi ke WebP
+                const response = await axios.post(route('admin.bank-soal.upload-editor-image'), formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
+
+                // Hapus teks loading ("Mengupload gambar..." = 20 karakter)
+                quill.deleteText(range.index, 20);
+
+                // Masukkan URL gambar WebP ke dalam editor
+                const url = response.data.url;
+                quill.insertEmbed(range.index, 'image', url);
+
+                // Pindahkan kursor ke setelah gambar
+                quill.setSelection(range.index + 1);
+
+            } catch (error) {
+                console.error('Upload gagal', error);
+                alert('Terjadi kesalahan saat mengupload gambar ke editor.');
+
+                // Hapus teks loading jika gagal
+                const quill = quillRef.current.getEditor();
+                const range = quill.getSelection(true);
+                quill.deleteText(range.index - 20, 20);
+            }
+        };
     };
+
+    // Toolbar kustom untuk Quill (Gunakan useMemo agar tidak re-render & hilang fokus)
+    const quillModules = useMemo(() => ({
+        toolbar: {
+            container: [
+                [{ 'header': [1, 2, 3, false] }],
+                ['bold', 'italic', 'underline', 'strike'],
+                [{ 'align': [] }],
+                [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+                ['link', 'image', 'formula'],
+                ['clean']
+            ],
+            handlers: {
+                image: imageHandler // Pasang fungsi custom kita di sini
+            }
+        }
+    }), []);
 
     const renderAnswerEngine = () => {
         if (data.tipe_soal === 'pg' || data.tipe_soal === 'pg_kompleks' || data.tipe_soal === 'survei') {
@@ -191,7 +259,14 @@ export default function Create({ auth, kategori }) {
                         </div>
                         <div className="p-6">
                             <div className="quill-editor mb-6">
-                                <ReactQuill theme="snow" value={data.pertanyaan} onChange={c => setData('pertanyaan', c)} modules={quillModules} placeholder="Ketikkan wacana, cerita, atau teks pertanyaan utama di sini..." />
+                                <ReactQuill
+                                    ref={quillRef} // <-- PENTING: Pasang ref di sini
+                                    theme="snow"
+                                    value={data.pertanyaan}
+                                    onChange={c => setData('pertanyaan', c)}
+                                    modules={quillModules}
+                                    placeholder="Ketikkan wacana, cerita, atau teks pertanyaan utama di sini..."
+                                />
                                 {errors.pertanyaan && <p className="text-rose-500 text-xs mt-2">{errors.pertanyaan}</p>}
                             </div>
                             <div>
@@ -251,7 +326,7 @@ export default function Create({ auth, kategori }) {
                             <div>
                                 <label className="text-xs font-bold text-slate-500 uppercase">Bobot Nilai</label>
                                 <div className="relative mt-2">
-                                    <input type="number" min="1" max="100" value={data.bobot_nilai} onChange={e => setData('bobot_nilai', e.target.value)} className="w-full border-slate-200 rounded-xl focus:ring-indigo-500 text-sm font-bold pl-4 pr-12" required />
+                                    <input type="number" min="0" max="100" value={data.bobot_nilai} onChange={e => setData('bobot_nilai', e.target.value)} className="w-full border-slate-200 rounded-xl focus:ring-indigo-500 text-sm font-bold pl-4 pr-12" required />
                                     <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none text-slate-400 text-sm font-medium">Poin</div>
                                 </div>
                             </div>
@@ -260,8 +335,11 @@ export default function Create({ auth, kategori }) {
                                 <button type="submit" disabled={processing} className="w-full py-3.5 bg-indigo-600 text-white font-black rounded-xl shadow-lg hover:bg-indigo-700 transition disabled:opacity-50">
                                     {processing ? 'Menyimpan...' : 'Simpan Soal'}
                                 </button>
-                                <Link href={route('admin.bank-soal.index')} className="block text-center mt-3 text-sm font-bold text-slate-500 hover:text-rose-500 transition">
-                                    Batal & Kembali
+                                <Link
+                                    href={ujian_id ? route('admin.ujian.show', ujian_id) : route('admin.bank-soal.index')}
+                                    className="block text-center mt-3 px-6 py-2.5 rounded-xl font-bold text-slate-500 hover:bg-slate-100 transition"
+                                >
+                                    Batal
                                 </Link>
                             </div>
                         </div>

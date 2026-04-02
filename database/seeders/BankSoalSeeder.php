@@ -174,13 +174,25 @@ class BankSoalSeeder extends Seeder
         // =========================================================================
         // 4. Masukkan semua soal ke dalam Ujian (Tabel Pivot)
         // =========================================================================
-        $ujian->soals()->attach([
+        // Daftar ID soal yang ingin dimasukkan
+        $daftarSoal = [
             $soal1->id,
             $soal2->id,
             $soal3->id,
             $soal4->id,
             $soal5->id,
             $soal6->id,
-        ]);
+        ];
+
+        $dataPivot = [];
+        $nomorUrut = 1;
+
+        // Loop untuk membuat struktur pivot secara otomatis
+        foreach ($daftarSoal as $soalId) {
+            $dataPivot[$soalId] = ['urutan_nomor' => $nomorUrut++];
+        }
+
+        // Attach ke ujian
+        $ujian->soals()->attach($dataPivot);
     }
 }

@@ -107,7 +107,7 @@ export default function Dashboard({ auth, statistik, ujianTersedia, riwayatUjian
 
                                         <div className="mt-auto">
                                             <Link
-                                                href={`/ujian/${ujian.id}/mulai`}
+                                                href={`/ujian/${ujian.id}/persiapan`}
                                                 className="block w-full text-center bg-slate-900 hover:bg-indigo-600 text-white font-bold py-3 px-4 rounded-xl transition-colors shadow-md"
                                             >
                                                 Kerjakan Sekarang &rarr;
