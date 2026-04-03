@@ -5,9 +5,16 @@ import axios from 'axios';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 
+// 🌟 IMPORT KATEX UNTUK RUMUS MATEMATIKA
+import katex from "katex";
+import "katex/dist/katex.min.css";
+
+// Mendaftarkan katex ke window agar dikenali oleh Quill
+window.katex = katex;
+
 export default function Edit({ auth, soal, kategori }) {
     const fileInputRef = useRef(null);
-    const quillRef = useRef(null); // <-- Referensi baru untuk ReactQuill
+    const quillRef = useRef(null);
 
     // Fungsi pintar untuk mendeteksi asal gambar (Lokal vs Internet/Seeder)
     const getImageUrl = (path) => {
@@ -55,7 +62,6 @@ export default function Edit({ auth, soal, kategori }) {
             }
         } else if (soal.tipe_soal === 'menjodohkan') {
             if (dbOpsi.length > 0) {
-                // Ambil grup L (Kiri) dan R (Kanan), urutkan berdasarkan nomor L1, L2 dst
                 const lefts = dbOpsi.filter(o => o.group && o.group.startsWith('L')).sort((a,b) => a.group.localeCompare(b.group));
                 const rights = dbOpsi.filter(o => o.group && o.group.startsWith('R')).sort((a,b) => a.group.localeCompare(b.group));
 
@@ -81,13 +87,12 @@ export default function Edit({ auth, soal, kategori }) {
         kategori_id: soal.kategori_id || '',
         tipe_soal: soal.tipe_soal || 'pg',
         pertanyaan: soal.pertanyaan || '',
-        gambar: null, // Hanya diisi jika admin mengganti gambar baru
+        gambar: null,
         bobot_nilai: soal.bobot_nilai || 10,
-        hapus_gambar: false, // Menandai jika gambar dihapus
+        hapus_gambar: false,
         ...initialParsedState
     });
 
-    // Reset layout jawaban ketika tipe soal DIBERUBAH SAAT MENGEDIT
     useEffect(() => {
         if (data.tipe_soal === soal.tipe_soal) return;
 
@@ -131,31 +136,22 @@ export default function Edit({ auth, soal, kategori }) {
             formData.append('image', file);
 
             try {
-                // Tampilkan loading sementara di editor
                 const quill = quillRef.current.getEditor();
                 const range = quill.getSelection(true);
                 quill.insertText(range.index, 'Mengupload gambar...', 'italic', true);
 
-                // Kirim gambar ke API Laravel untuk dikonversi ke WebP
                 const response = await axios.post(route('admin.bank-soal.upload-editor-image'), formData, {
                     headers: { 'Content-Type': 'multipart/form-data' }
                 });
 
-                // Hapus teks loading ("Mengupload gambar..." = 20 karakter)
                 quill.deleteText(range.index, 20);
-
-                // Masukkan URL gambar WebP ke dalam editor
                 const url = response.data.url;
                 quill.insertEmbed(range.index, 'image', url);
-
-                // Pindahkan kursor ke setelah gambar
                 quill.setSelection(range.index + 1);
 
             } catch (error) {
                 console.error('Upload gagal', error);
                 alert('Terjadi kesalahan saat mengupload gambar ke editor.');
-
-                // Hapus teks loading jika gagal
                 const quill = quillRef.current.getEditor();
                 const range = quill.getSelection(true);
                 quill.deleteText(range.index - 20, 20);
@@ -163,31 +159,42 @@ export default function Edit({ auth, soal, kategori }) {
         };
     };
 
-    // Toolbar kustom untuk Quill (Gunakan useMemo agar tidak re-render & hilang fokus)
+    // 🌟 MODULES UNTUK EDITOR PERTANYAAN UTAMA (FULL)
     const quillModules = useMemo(() => ({
         toolbar: {
             container: [
                 [{ 'header': [1, 2, 3, false] }],
                 ['bold', 'italic', 'underline', 'strike'],
+                [{ 'script': 'sub'}, { 'script': 'super' }],
                 [{ 'align': [] }],
                 [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-                ['link', 'image', 'formula'],
+                ['link', 'image', 'formula'], // 🌟 TOMBOL FORMULA AKTIF
                 ['clean']
             ],
             handlers: {
-                image: imageHandler // Pasang fungsi custom kita di sini
+                image: imageHandler
             }
         }
+    }), []);
+
+    // 🌟 MODULES UNTUK EDITOR OPSI JAWABAN (MINI)
+    const miniQuillModules = useMemo(() => ({
+        toolbar: [
+            ['bold', 'italic', 'underline'],
+            [{ 'script': 'sub'}, { 'script': 'super' }],
+            ['formula'], // Tombol formula tetap ada
+            ['clean']
+        ]
     }), []);
 
     // --- ENGINE JAWABAN ---
     const renderAnswerEngine = () => {
         if (data.tipe_soal === 'pg' || data.tipe_soal === 'pg_kompleks' || data.tipe_soal === 'survei') {
              return (
-                <div className="space-y-3">
+                <div className="space-y-4">
                     {data.opsi.map((opt, index) => (
-                        <div key={index} className="flex items-start gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-sm focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500 transition-all">
-                            <div className="pt-2 pl-2">
+                        <div key={index} className="flex items-start gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500 transition-all">
+                            <div className="pt-3 pl-1">
                                 {data.tipe_soal === 'pg' && (
                                     <input type="radio" name="kunci_pg" checked={data.kunci_jawaban === index} onChange={() => setData('kunci_jawaban', index)} className="w-5 h-5 text-emerald-600 focus:ring-emerald-500 cursor-pointer" />
                                 )}
@@ -206,19 +213,28 @@ export default function Edit({ auth, soal, kategori }) {
                                 )}
                             </div>
 
-                            <div className="flex-1">
-                                <textarea value={opt} onChange={e => {
-                                    const newOpsi = [...data.opsi]; newOpsi[index] = e.target.value; setData('opsi', newOpsi);
-                                }} rows="1" placeholder={`Ketik pilihan jawaban ${String.fromCharCode(65 + index)}...`} className="w-full border-0 focus:ring-0 text-sm p-2 resize-none" required={data.tipe_soal !== 'survei'}></textarea>
+                            <div className="flex-1 mini-quill">
+                                {/* 🌟 TEXTAREA DIUBAH MENJADI REACT QUILL MINI */}
+                                <ReactQuill
+                                    theme="snow"
+                                    value={opt}
+                                    onChange={c => {
+                                        const newOpsi = [...data.opsi];
+                                        newOpsi[index] = c;
+                                        setData('opsi', newOpsi);
+                                    }}
+                                    modules={miniQuillModules}
+                                    placeholder={`Jawaban ${String.fromCharCode(65 + index)}...`}
+                                />
                             </div>
 
                             <button type="button" onClick={() => {
                                 if(data.opsi.length <= 2) return alert('Minimal 2 pilihan jawaban!');
                                 setData('opsi', data.opsi.filter((_, i) => i !== index));
-                            }} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
+                            }} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition mt-2"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
                         </div>
                     ))}
-                    <button type="button" onClick={() => setData('opsi', [...data.opsi, ''])} className="mt-3 text-sm font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-4 py-2 rounded-lg transition border border-indigo-100 border-dashed w-full">+ Tambah Pilihan Jawaban</button>
+                    <button type="button" onClick={() => setData('opsi', [...data.opsi, ''])} className="mt-3 text-sm font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-4 py-3 rounded-lg transition border border-indigo-100 border-dashed w-full">+ Tambah Pilihan Jawaban</button>
                 </div>
             );
         }
@@ -243,13 +259,22 @@ export default function Edit({ auth, soal, kategori }) {
                     </div>
 
                     {data.pernyataan_bs.map((item, index) => (
-                        <div key={index} className="flex items-center gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-sm transition-all focus-within:border-indigo-500 focus-within:ring-1">
-                            <div className="flex-1">
-                                <textarea value={item.teks} onChange={e => {
-                                        const newP = [...data.pernyataan_bs]; newP[index].teks = e.target.value; setData('pernyataan_bs', newP);
-                                    }} rows="2" placeholder="Ketik pernyataan turunan..." className="w-full border-0 focus:ring-0 text-sm p-2 resize-none" required></textarea>
+                        <div key={index} className="flex items-start gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm transition-all focus-within:border-indigo-500 focus-within:ring-1">
+                            <div className="flex-1 mini-quill">
+                                {/* 🌟 TEXTAREA DIUBAH MENJADI REACT QUILL MINI */}
+                                <ReactQuill
+                                    theme="snow"
+                                    value={item.teks}
+                                    onChange={c => {
+                                        const newP = [...data.pernyataan_bs];
+                                        newP[index].teks = c;
+                                        setData('pernyataan_bs', newP);
+                                    }}
+                                    modules={miniQuillModules}
+                                    placeholder="Ketik pernyataan turunan..."
+                                />
                             </div>
-                            <div className="w-32 flex justify-center gap-2 border-l border-slate-100 pl-3">
+                            <div className="w-32 flex justify-center gap-2 border-l border-slate-100 pl-3 mt-3">
                                 <label className={`cursor-pointer px-3 py-1.5 rounded-lg text-sm font-bold transition ${item.kunci === 'Benar' ? 'bg-emerald-500 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
                                     <input type="radio" className="hidden" name={`kunci_bs_${index}`} value="Benar" checked={item.kunci === 'Benar'} onChange={() => {
                                             const newP = [...data.pernyataan_bs]; newP[index].kunci = 'Benar'; setData('pernyataan_bs', newP);
@@ -264,10 +289,10 @@ export default function Edit({ auth, soal, kategori }) {
                             <button type="button" onClick={() => {
                                 if(data.pernyataan_bs.length <= 1) return alert('Minimal 1 pernyataan!');
                                 setData('pernyataan_bs', data.pernyataan_bs.filter((_, i) => i !== index));
-                            }} className="p-2 text-slate-400 hover:text-rose-500 w-10 flex justify-center"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
+                            }} className="p-2 text-slate-400 hover:text-rose-500 w-10 flex justify-center mt-2"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
                         </div>
                     ))}
-                    <button type="button" onClick={() => setData('pernyataan_bs', [...data.pernyataan_bs, { teks: '', kunci: 'Benar' }])} className="w-full py-2 border border-dashed rounded-xl text-sm font-bold text-slate-500 hover:bg-slate-50 transition">+ Tambah Pernyataan</button>
+                    <button type="button" onClick={() => setData('pernyataan_bs', [...data.pernyataan_bs, { teks: '', kunci: 'Benar' }])} className="w-full py-3 border border-dashed rounded-xl text-sm font-bold text-slate-500 hover:bg-slate-50 transition">+ Tambah Pernyataan</button>
                 </div>
             );
         }
@@ -277,14 +302,18 @@ export default function Edit({ auth, soal, kategori }) {
                 <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4"><div className="text-xs font-bold text-slate-500 uppercase text-center">Kolom Kiri (L)</div><div className="text-xs font-bold text-slate-500 uppercase text-center">Kolom Kanan (R)</div></div>
                     {data.pasangan.map((pair, index) => (
-                        <div key={index} className="flex gap-4 items-center">
-                            <input type="text" value={pair.kiri} onChange={e => { const newP = [...data.pasangan]; newP[index].kiri = e.target.value; setData('pasangan', newP); }} className="flex-1 border-slate-200 rounded-xl focus:ring-indigo-500 text-sm" placeholder="Ketik premis..." required />
-                            <span className="font-bold text-slate-300">==</span>
-                            <input type="text" value={pair.kanan} onChange={e => { const newP = [...data.pasangan]; newP[index].kanan = e.target.value; setData('pasangan', newP); }} className="flex-1 border-slate-200 rounded-xl focus:ring-emerald-500 text-sm" placeholder="Ketik jawaban benar..." required />
-                            <button type="button" onClick={() => { if(data.pasangan.length <= 2) return alert('Minimal 2 pasang!'); setData('pasangan', data.pasangan.filter((_, i) => i !== index)); }} className="text-rose-500 p-2 hover:bg-rose-50 rounded-lg"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
+                        <div key={index} className="flex gap-4 items-start">
+                            <div className="flex-1 mini-quill">
+                                <ReactQuill theme="snow" value={pair.kiri} onChange={c => { const newP = [...data.pasangan]; newP[index].kiri = c; setData('pasangan', newP); }} modules={miniQuillModules} placeholder="Ketik premis..." />
+                            </div>
+                            <span className="font-bold text-slate-300 mt-4">==</span>
+                            <div className="flex-1 mini-quill">
+                                <ReactQuill theme="snow" value={pair.kanan} onChange={c => { const newP = [...data.pasangan]; newP[index].kanan = c; setData('pasangan', newP); }} modules={miniQuillModules} placeholder="Ketik jawaban..." />
+                            </div>
+                            <button type="button" onClick={() => { if(data.pasangan.length <= 2) return alert('Minimal 2 pasang!'); setData('pasangan', data.pasangan.filter((_, i) => i !== index)); }} className="text-rose-500 p-2 hover:bg-rose-50 rounded-lg mt-2"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
                         </div>
                     ))}
-                    <button type="button" onClick={() => setData('pasangan', [...data.pasangan, { kiri: '', kanan: '' }])} className="w-full py-2 border border-dashed rounded-xl text-sm font-bold text-slate-500 hover:bg-slate-50 transition">+ Tambah Baris Pasangan</button>
+                    <button type="button" onClick={() => setData('pasangan', [...data.pasangan, { kiri: '', kanan: '' }])} className="w-full py-3 border border-dashed rounded-xl text-sm font-bold text-slate-500 hover:bg-slate-50 transition">+ Tambah Baris Pasangan</button>
                 </div>
             );
         }
@@ -293,7 +322,17 @@ export default function Edit({ auth, soal, kategori }) {
     return (
         <AuthenticatedLayout header={<h2 className="font-bold text-2xl text-slate-800 tracking-tight">Perbarui Soal</h2>}>
             <Head title="Edit Soal" />
-            <style>{`.quill-editor .ql-container { min-height: 150px; border-bottom-left-radius: 0.75rem; border-bottom-right-radius: 0.75rem; font-size: 15px; } .quill-editor .ql-toolbar { border-top-left-radius: 0.75rem; border-top-right-radius: 0.75rem; background-color: #f8fafc; border-color: #e2e8f0; }`}</style>
+
+            {/* 🌟 CUSTOM CSS UNTUK EDITOR AGAR RAPI */}
+            <style>{`
+                .quill-editor .ql-container { min-height: 150px; border-bottom-left-radius: 0.75rem; border-bottom-right-radius: 0.75rem; font-size: 15px; }
+                .quill-editor .ql-toolbar { border-top-left-radius: 0.75rem; border-top-right-radius: 0.75rem; background-color: #f8fafc; border-color: #e2e8f0; }
+
+                /* Style khusus untuk editor opsi (Mini Quill) */
+                .mini-quill .ql-container { min-height: 60px; border-bottom-left-radius: 0.5rem; border-bottom-right-radius: 0.5rem; border-color: #e2e8f0; font-size: 14px;}
+                .mini-quill .ql-toolbar { border-top-left-radius: 0.5rem; border-top-right-radius: 0.5rem; background-color: #f1f5f9; border-color: #e2e8f0; padding: 4px 8px;}
+                .mini-quill .ql-editor { padding: 8px 12px; }
+            `}</style>
 
             <form onSubmit={submit} className="max-w-6xl mx-auto mt-6 grid grid-cols-1 lg:grid-cols-3 gap-8 pb-20">
                 <div className="lg:col-span-2 space-y-6">
@@ -309,7 +348,7 @@ export default function Edit({ auth, soal, kategori }) {
                         <div className="p-6">
                             <div className="quill-editor mb-6">
                                 <ReactQuill
-                                    ref={quillRef} // <-- PENTING: Pasang ref di sini
+                                    ref={quillRef}
                                     theme="snow"
                                     value={data.pertanyaan}
                                     onChange={c => setData('pertanyaan', c)}

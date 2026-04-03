@@ -3,7 +3,7 @@ import { Head, Link, router, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 import {
     BookOpen, Plus, Search, Edit3, Trash2,
-    Settings, Clock, Calendar, Folder, HelpCircle, X
+    Settings, Clock, Calendar, Folder, HelpCircle, X, Activity
 } from 'lucide-react';
 
 export default function IndexUjian({ auth, ujians, kategoriUjian }) {
@@ -183,36 +183,46 @@ export default function IndexUjian({ auth, ujians, kategoriUjian }) {
                                         </div>
                                     </td>
                                     <td className="px-8 py-5">
-                                        <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+    <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
 
-                                            {/* Tombol Kelola Soal */}
-                                            <Link
-                                                href={route('admin.ujian.show', ujian.id)}
-                                                className="flex items-center gap-1.5 px-3 py-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 hover:text-indigo-700 rounded-xl text-xs font-bold transition-colors border border-indigo-100"
-                                                title="Kelola Soal Ujian"
-                                            >
-                                                <Settings size={14} /> Kelola Soal
-                                            </Link>
+        {/* Tombol Monitoring (Warna Sky/Biru) */}
+        <Link
+            href={route('admin.ujian.monitoring', ujian.id)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-sky-50 text-sky-600 hover:bg-sky-100 hover:text-sky-700 rounded-xl text-xs font-bold transition-colors border border-sky-100"
+            title="Monitoring Peserta Ujian"
+        >
+            {/* Pastikan Anda sudah import { Activity } from 'lucide-react' di atas */}
+            <Activity size={14} /> Monitoring
+        </Link>
 
-                                            {/* TOMBOL BUKA MODAL EDIT */}
-                                            <button
-                                                onClick={() => openEditModal(ujian)}
-                                                className="p-2 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-xl transition-colors border border-transparent hover:border-amber-100"
-                                                title="Edit Pengaturan Ujian"
-                                            >
-                                                <Edit3 size={16} />
-                                            </button>
+        {/* Tombol Kelola Soal (Warna Indigo/Ungu) */}
+        <Link
+            href={route('admin.ujian.show', ujian.id)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 hover:text-indigo-700 rounded-xl text-xs font-bold transition-colors border border-indigo-100"
+            title="Kelola Soal Ujian"
+        >
+            <Settings size={14} /> Kelola Soal
+        </Link>
 
-                                            {/* Tombol Hapus */}
-                                            <button
-                                                onClick={() => handleDelete(ujian.id)}
-                                                className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors border border-transparent hover:border-rose-100"
-                                                title="Hapus Ujian"
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
-                                        </div>
-                                    </td>
+        {/* TOMBOL BUKA MODAL EDIT */}
+        <button
+            onClick={() => openEditModal(ujian)}
+            className="p-2 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-xl transition-colors border border-transparent hover:border-amber-100"
+            title="Edit Pengaturan Ujian"
+        >
+            <Edit3 size={16} />
+        </button>
+
+        {/* Tombol Hapus */}
+        <button
+            onClick={() => handleDelete(ujian.id)}
+            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors border border-transparent hover:border-rose-100"
+            title="Hapus Ujian"
+        >
+            <Trash2 size={16} />
+        </button>
+    </div>
+</td>
                                 </tr>
                             )) : (
                                 <tr>

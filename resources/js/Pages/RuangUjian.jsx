@@ -1,6 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { Head, router } from '@inertiajs/react';
 
+// 🌟 IMPORT KATEX
+import renderMathInElement from 'katex/dist/contrib/auto-render';
+import 'katex/dist/katex.min.css';
+
 export default function RuangUjian({ auth, sesi, dataSoal, errors }) {
     // ------------------------------------------------------------------------------------
     // 1. STATE MANAGEMENT, WAKTU SERVER, FULLSCREEN & UI SETTINGS
@@ -24,6 +28,32 @@ export default function RuangUjian({ auth, sesi, dataSoal, errors }) {
     // Identifier unik untuk LocalStorage
     const idUjianUnik = `cbt_jawaban_${sesi.id}`;
     const idRaguUnik = `cbt_ragu_${sesi.id}`;
+
+    // 🌟 REF UNTUK CONTAINER KATEX
+    const contentRef = useRef(null);
+
+    // 🌟 EFFECT AUTO-RENDER KATEX
+    useEffect(() => {
+        if (contentRef.current) {
+            renderMathInElement(contentRef.current, {
+                delimiters: [
+                    { left: '$$', right: '$$', display: true },
+                    { left: '$', right: '$', display: false },
+                    { left: '\\(', right: '\\)', display: false },
+                    { left: '\\[', right: '\\]', display: true },
+                ],
+                throwOnError: false,
+            });
+        }
+    }, [indeksAktif, fontSize, soalSekarang]); // Trigger jika soal atau font berubah
+
+    // 🌟 HELPER COMPONENT UNTUK RENDER TEKS/HTML
+    const MathContent = ({ html, className = "" }) => (
+        <div
+            className={`math-content ${className}`}
+            dangerouslySetInnerHTML={{ __html: html }}
+        />
+    );
 
     // Timer Akurat dari Server
     const hitungSisaDetik = () => {
@@ -162,30 +192,25 @@ export default function RuangUjian({ auth, sesi, dataSoal, errors }) {
         setJawabanSiswa(jawabanBaru);
         localStorage.setItem(idUjianUnik, JSON.stringify(jawabanBaru));
 
-        // Ambil status ragu-ragu saat ini (default false jika belum ada)
         const isRagu = raguRagu[idSoal] || false;
 
         router.post(`/ujian/${sesi.id}/simpan-jawaban`, {
             soal_id: idSoal,
             jawaban: jawabanBaru[idSoal],
-            is_ragu: isRagu // Kirim status ragu-ragu ke server
+            is_ragu: isRagu
         }, {
             preserveState: true, preserveScroll: true, replace: true,
         });
     };
 
-    // 🔥 FUNGSI BARU: TOGGLE RAGU-RAGU
     const handleToggleRagu = () => {
         const idSoal = soalSekarang.id;
-        const statusBaru = !raguRagu[idSoal]; // Balikkan status (true -> false, false -> true)
+        const statusBaru = !raguRagu[idSoal];
 
-        // Update state dan localstorage
         const raguBaru = { ...raguRagu, [idSoal]: statusBaru };
         setRaguRagu(raguBaru);
         localStorage.setItem(idRaguUnik, JSON.stringify(raguBaru));
 
-        // Kirim update ke server TANPA mengubah jawaban
-        // (Kita kirim jawaban yang sudah ada, tapi status is_ragu-nya yang diubah)
         const jawabanCurrent = jawabanSiswa[idSoal] || null;
 
         router.post(`/ujian/${sesi.id}/simpan-jawaban`, {
@@ -200,7 +225,7 @@ export default function RuangUjian({ auth, sesi, dataSoal, errors }) {
     // ------------------------------------------------------------------------------------
     // 3. KELAS UKURAN FONT DINAMIS & MESIN PERENDER UI SOAL
     // ------------------------------------------------------------------------------------
-   const fontTanya = fontSize === 0 ? "text-base md:text-xl" : fontSize === 1 ? "text-lg md:text-2xl" : "text-xl md:text-3xl";
+    const fontTanya = fontSize === 0 ? "text-base md:text-xl" : fontSize === 1 ? "text-lg md:text-2xl" : "text-xl md:text-3xl";
     const fontBase = fontSize === 0 ? "text-sm md:text-base" : fontSize === 1 ? "text-base md:text-lg" : "text-lg md:text-xl";
     const fontSmall = fontSize === 0 ? "text-xs md:text-sm" : fontSize === 1 ? "text-sm md:text-base" : "text-base md:text-lg";
     const fontXSmall = fontSize === 0 ? "text-[10px] md:text-xs" : fontSize === 1 ? "text-xs sm:text-sm md:text-base" : "text-sm sm:text-base md:text-lg";
@@ -222,7 +247,8 @@ export default function RuangUjian({ auth, sesi, dataSoal, errors }) {
                                         <span className="font-bold text-xs md:text-sm">{huruf}</span>
                                     </div>
                                     <input type="radio" checked={isSelected} onChange={() => handleSimpanJawaban(id, 'pg', pilihan.id)} className="hidden"/>
-                                    <span className={`${fontBase} font-medium ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>{pilihan.teks_opsi}</span>
+                                    {/* 🌟 GANTI SPAN DENGAN MATHCONTENT */}
+                                    <MathContent html={pilihan.teks_opsi} className={`${fontBase} font-medium ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`} />
                                 </label>
                             );
                         })}
@@ -242,7 +268,8 @@ export default function RuangUjian({ auth, sesi, dataSoal, errors }) {
                             return (
                                 <label key={pilihan.id} className={`flex items-center p-4 md:p-5 border-2 rounded-2xl cursor-pointer transition-all duration-200 ease-in-out ${isChecked ? 'border-indigo-600 bg-indigo-50/50 shadow-md shadow-indigo-100/50' : 'border-slate-200 hover:border-indigo-300 hover:bg-slate-50'}`}>
                                     <input type="checkbox" checked={isChecked} onChange={() => handleSimpanJawaban(id, 'pg_kompleks', pilihan.id)} className="w-5 h-5 md:w-6 md:h-6 flex-shrink-0 text-indigo-600 rounded-md border-gray-300 focus:ring-indigo-500 transition-all cursor-pointer"/>
-                                    <span className={`ml-3 md:ml-4 ${fontBase} font-medium ${isChecked ? 'text-indigo-900' : 'text-slate-700'}`}>{pilihan.teks_opsi}</span>
+                                    {/* 🌟 GANTI SPAN DENGAN MATHCONTENT */}
+                                    <MathContent html={pilihan.teks_opsi} className={`ml-3 md:ml-4 ${fontBase} font-medium ${isChecked ? 'text-indigo-900' : 'text-slate-700'}`} />
                                 </label>
                             );
                         })}
@@ -293,7 +320,8 @@ export default function RuangUjian({ auth, sesi, dataSoal, errors }) {
                                     const isSelected = selectedLeft === item.id;
                                     return (
                                         <div key={item.id} ref={el => leftRefs.current[item.id] = el} onClick={() => setSelectedLeft(item.id)} className={`p-2.5 sm:p-4 md:p-5 bg-white border-2 rounded-xl md:rounded-2xl cursor-pointer flex justify-between items-center transition-all duration-200 relative ${isSelected ? 'border-indigo-500 ring-2 md:ring-4 ring-indigo-50 shadow-md scale-[1.02]' : 'border-slate-200 hover:border-indigo-300 shadow-sm'}`}>
-                                            <span className={`text-slate-700 ${fontXSmall} font-medium break-words w-full pr-1`}>{item.teks_opsi}</span>
+                                            {/* 🌟 GANTI SPAN DENGAN MATHCONTENT */}
+                                            <MathContent html={item.teks_opsi} className={`text-slate-700 ${fontXSmall} font-medium break-words w-full pr-1`} />
                                             <div className={`w-2.5 h-2.5 md:w-4 md:h-4 rounded-full flex-shrink-0 transition-colors ${isConnected ? 'bg-indigo-500 ring-2 md:ring-4 ring-indigo-100' : 'bg-slate-200'}`}></div>
                                         </div>
                                     );
@@ -307,7 +335,8 @@ export default function RuangUjian({ auth, sesi, dataSoal, errors }) {
                                     return (
                                         <div key={item.id} ref={el => rightRefs.current[item.id] = el} onClick={() => handleConnect(item.id)} className={`p-2.5 sm:p-4 md:p-5 bg-white border-2 rounded-xl md:rounded-2xl flex justify-between items-center transition-all duration-200 cursor-pointer relative ${isConnected ? 'border-emerald-500 ring-2 md:ring-4 ring-emerald-50 shadow-md' : (selectedLeft ? 'border-amber-400 bg-amber-50/50' : 'border-slate-200 hover:border-emerald-300 shadow-sm')}`}>
                                             <div className={`w-2.5 h-2.5 md:w-4 md:h-4 rounded-full flex-shrink-0 mr-1.5 md:mr-3 transition-colors ${isConnected ? 'bg-emerald-500 ring-2 md:ring-4 ring-emerald-100' : 'bg-slate-200'}`}></div>
-                                            <span className={`text-slate-700 ${fontXSmall} font-medium break-words w-full pl-1`}>{item.teks_opsi}</span>
+                                            {/* 🌟 GANTI SPAN DENGAN MATHCONTENT */}
+                                            <MathContent html={item.teks_opsi} className={`text-slate-700 ${fontXSmall} font-medium break-words w-full pl-1`} />
                                         </div>
                                     );
                                 })}
@@ -335,7 +364,10 @@ export default function RuangUjian({ auth, sesi, dataSoal, errors }) {
                                         const valueRow = objectJawabanTable[rowKey];
                                         return (
                                             <tr key={rowKey} className="hover:bg-slate-50/80 transition-colors group">
-                                                <td className={`p-4 md:p-5 text-slate-700 font-medium ${fontSmall}`}>{idx+1}. {pernyataan.teks_opsi}</td>
+                                                {/* 🌟 GANTI TD DENGAN MATHCONTENT */}
+                                                <td className={`p-4 md:p-5`}>
+                                                     <MathContent html={`${idx+1}. ${pernyataan.teks_opsi}`} className={`text-slate-700 font-medium ${fontSmall}`} />
+                                                </td>
                                                 <td className="p-4 md:p-5 text-center bg-emerald-50/10 border-l border-slate-100 cursor-pointer hover:bg-emerald-50/50" onClick={() => handleSimpanJawaban(id, 'benar_salah', {key: rowKey, value: 'Benar'})}>
                                                     <input type="radio" checked={valueRow === 'Benar'} readOnly className="w-5 h-5 md:w-6 md:h-6 text-emerald-500 focus:ring-emerald-500 cursor-pointer" />
                                                 </td>
@@ -363,7 +395,8 @@ export default function RuangUjian({ auth, sesi, dataSoal, errors }) {
                                         <div className={`w-10 h-10 md:w-12 md:h-12 flex items-center justify-center rounded-full mb-2 md:mb-3 transition-colors ${isSelected ? 'bg-amber-400 text-amber-900' : 'bg-slate-100 text-slate-400'}`}>
                                             <p className="font-black text-xl md:text-2xl">{index + 1}</p>
                                         </div>
-                                       <p className={`${fontSize === 0 ? 'text-[10px] md:text-xs' : fontSize === 1 ? 'text-xs md:text-sm' : 'text-sm md:text-base'} leading-tight font-medium ${isSelected ? 'text-amber-900' : 'text-slate-600'}`}>{pilihan.teks_opsi}</p>
+                                        {/* 🌟 GANTI P DENGAN MATHCONTENT */}
+                                        <MathContent html={pilihan.teks_opsi} className={`${fontSize === 0 ? 'text-[10px] md:text-xs' : fontSize === 1 ? 'text-xs md:text-sm' : 'text-sm md:text-base'} leading-tight font-medium ${isSelected ? 'text-amber-900' : 'text-slate-600'}`} />
                                     </label>
                                 );
                             })}
@@ -418,7 +451,8 @@ export default function RuangUjian({ auth, sesi, dataSoal, errors }) {
                 </div>
             </nav>
 
-            <div className="max-w-7xl mx-auto p-3 sm:p-6 lg:p-8 mt-2 md:mt-4 flex flex-col lg:flex-row gap-6 md:gap-8">
+            {/* 🌟 PASANG REF DI CONTAINER UTAMA KIRI UNTUK KATEX */}
+            <div ref={contentRef} className="max-w-7xl mx-auto p-3 sm:p-6 lg:p-8 mt-2 md:mt-4 flex flex-col lg:flex-row gap-6 md:gap-8">
                 {/* KOLOM KIRI */}
                 <div className="lg:w-3/4 flex flex-col gap-4 md:gap-6">
 
@@ -455,7 +489,8 @@ export default function RuangUjian({ auth, sesi, dataSoal, errors }) {
                                 </div>
                             )}
 
-                            <div className={`${fontTanya} text-slate-800 font-normal leading-relaxed mb-6 md:mb-8 transition-all space-y-4`} dangerouslySetInnerHTML={{ __html: soalSekarang.tanya }} />
+                            {/* 🌟 GANTI DANGEROUSLYSETINNERHTML DENGAN MATHCONTENT */}
+                            <MathContent html={soalSekarang.tanya} className={`${fontTanya} text-slate-800 font-normal leading-relaxed mb-6 md:mb-8 transition-all space-y-4`} />
 
                             {renderLembarSoal()}
 

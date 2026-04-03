@@ -111,6 +111,12 @@ Route::middleware(['auth', 'verified', 'auth.session'])->group(function () {
         Route::post('/ujian/{ujian}/import-soal', [AdminUjianController::class, 'importSoal'])->name('admin.ujian.import-soal');
         Route::delete('/ujian/{ujian}/remove-soal/{soal}', [AdminUjianController::class, 'removeSoal'])->name('admin.ujian.remove-soal');
 
+        // Rute Monitoring Ujian
+        Route::get('/ujian/{id}/monitoring', [AdminUjianController::class, 'monitoring'])->name('admin.ujian.monitoring');
+        Route::post('/ujian/{ujian_id}/peserta/reset', [AdminUjianController::class, 'resetPeserta'])->name('admin.ujian.reset-peserta');
+        Route::post('/ujian/{ujian_id}/peserta/tambah-waktu', [AdminUjianController::class, 'tambahWaktu'])->name('admin.ujian.tambah-waktu');
+        Route::post('/ujian/{id}/recalculate-nilai', [AdminUjianController::class, 'recalculateNilai'])->name('admin.ujian.recalculate');
+
         // Transaksi (Pindah ke dalam blok admin ini agar lebih rapi)
         Route::get('/transaksi', [TransaksiController::class, 'index'])->name('admin.transaksi.index');
         Route::post('/transaksi/{id}/approve', [TransaksiController::class, 'approve'])->name('admin.transaksi.approve');
