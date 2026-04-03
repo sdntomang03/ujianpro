@@ -34,12 +34,15 @@ class RegisteredUserController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|lowercase|email|max:255|unique:'.User::class,
+            // 🌟 Validasi jenjang (sesuaikan isi array dengan pilihan jenjang di aplikasi Anda)
+            'jenjang' => 'required|string|in:SD,SMP,SMA,UMUM',
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
         ]);
 
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
+            'jenjang' => $request->jenjang, // 🌟 Simpan data jenjang ke database
             'password' => Hash::make($request->password),
         ]);
 

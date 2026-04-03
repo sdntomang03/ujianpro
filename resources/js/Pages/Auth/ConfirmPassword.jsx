@@ -4,6 +4,7 @@ import PrimaryButton from '@/Components/PrimaryButton';
 import TextInput from '@/Components/TextInput';
 import GuestLayout from '@/Layouts/GuestLayout';
 import { Head, useForm } from '@inertiajs/react';
+import { ShieldCheck, Lock } from 'lucide-react'; // Import ikon keamanan
 
 export default function ConfirmPassword() {
     const { data, setData, post, processing, errors, reset } = useForm({
@@ -20,35 +21,55 @@ export default function ConfirmPassword() {
 
     return (
         <GuestLayout>
-            <Head title="Confirm Password" />
+            <Head title="Konfirmasi Kata Sandi" />
 
-            <div className="mb-4 text-sm text-gray-600">
-                This is a secure area of the application. Please confirm your
-                password before continuing.
+            {/* --- HEADER --- */}
+            <div className="mb-6 text-center">
+                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-indigo-100 text-indigo-600 mb-4">
+                    <ShieldCheck size={24} />
+                </div>
+                <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">
+                    Konfirmasi Keamanan
+                </h2>
+                <p className="mt-2 text-sm text-gray-600 font-medium leading-relaxed">
+                    Ini adalah area aman dari aplikasi. Silakan konfirmasi kata sandi Anda terlebih dahulu sebelum melanjutkan.
+                </p>
             </div>
 
             <form onSubmit={submit}>
-                <div className="mt-4">
-                    <InputLabel htmlFor="password" value="Password" />
 
-                    <TextInput
-                        id="password"
-                        type="password"
-                        name="password"
-                        value={data.password}
-                        className="mt-1 block w-full"
-                        isFocused={true}
-                        onChange={(e) => setData('password', e.target.value)}
-                    />
-
-                    <InputError message={errors.password} className="mt-2" />
+                {/* --- INPUT PASSWORD --- */}
+                <div>
+                    <InputLabel htmlFor="password" value="Kata Sandi Anda" />
+                    <div className="relative mt-1">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                            <Lock size={18} />
+                        </div>
+                        <TextInput
+                            id="password"
+                            type="password"
+                            name="password"
+                            value={data.password}
+                            className="block w-full pl-10 py-2.5 transition-all border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 shadow-sm"
+                            isFocused={true}
+                            onChange={(e) => setData('password', e.target.value)}
+                            placeholder="••••••••"
+                            required
+                        />
+                    </div>
+                    <InputError message={errors.password} className="mt-1" />
                 </div>
 
-                <div className="mt-4 flex items-center justify-end">
-                    <PrimaryButton className="ms-4" disabled={processing}>
-                        Confirm
+                {/* --- ACTION BUTTON --- */}
+                <div className="mt-8 flex justify-end">
+                    <PrimaryButton
+                        className="w-full sm:w-auto flex justify-center px-6 py-3 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 transition-all rounded-xl shadow-md shadow-indigo-200 text-base font-semibold"
+                        disabled={processing}
+                    >
+                        {processing ? 'Memproses...' : 'Konfirmasi Lanjutkan'}
                     </PrimaryButton>
                 </div>
+
             </form>
         </GuestLayout>
     );

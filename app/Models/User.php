@@ -11,7 +11,6 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Spatie\Permission\Traits\HasRoles;
 
-// 🌟 TAMBAHKAN 'paket_id' DAN 'jenjang' DI SINI
 #[Fillable(['name', 'email', 'password', 'paket_id', 'jenjang'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
